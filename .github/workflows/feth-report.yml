@@ -50,14 +50,10 @@ jobs:
 
           # --- Modeller ---
           class AnalysisResult(BaseModel):
-              found: bool
-              content_summary: Optional[str] = None
-              detected_rates: List[str] = Field(default_factory=list)
-              current_decree_rate: Optional[str] = None
-              official_confirmation: Optional[str] = None
+              rate: Optional[str] = None
               ai_prompt: Optional[str] = None
               error: Optional[str] = None
-
+              raw_ai_response: Optional[str] = None
           # --- Sabitler ---
           PDF_URL = "https://www.mevzuat.gov.tr/MevzuatMetin/1.3.6183.pdf"
           # GÜVENLİK UYARISI: API anahtarı doğrudan koda eklenmiştir. Bu reponun gizli olduğundan emin olun.
@@ -94,71 +90,27 @@ jobs:
               except Exception as e:
                   return None, f"Gemini API Bağlantı Hatası: {str(e)}"
 
-          async def verify_with_ai(text: str):
-              """AI ile metni doğrular."""
-              prompt = (
-                  f"Aşağıdaki 6183 sayılı kanun metninde (Madde 51) geçen güncel aylık gecikme zammı oranını tespit et. "
-                  f"Lütfen SADECE rakam olarak (Örn: 4.5) yanıt ver. Metin: {text[:1500]}"
-              )
-              # Bu fonksiyon içinde kendi client'ını oluşturarak izole bir istek yapar
-              async with httpx.AsyncClient() as client:
-                  raw_res, err = await call_gemini_api(prompt, client)
-                  if err:
-                      return None, prompt, err
-                  
-                  match = re.search(r"(\d+(?:[.,]\d+)?)", raw_res)
-                  val = match.group(1).replace(",", ".") if match else "Bulunamadı"
-                  return f"{val} (AI Onayı)", prompt
-
-          def analyze_text(text: str):
-              """Metin içinden Madde 51'i ve oranları çıkarır."""
-              normalized = re.sub(r'\s+', ' ', text)
-              pattern = re.compile(r"Madde\s*51[:\-\s\.].*?(?=Madde\s+\d+|$)", re.IGNORECASE | re.DOTALL)
-              match = pattern.search(normalized)
-              
-              if not match:
-                  return AnalysisResult(found=False, error="Madde 51 bulunamadı.")
-
-              content = match.group(0).strip()
-              rates = re.findall(r"%\s*(\d+(?:[.,]\d+)?)", content)
-              clean_rates = [str(float(r.replace(",", "."))) for r in rates if 0.5 <= float(r.replace(",", ".")) <= 10.0]
-              
-              return AnalysisResult(
-                  found=True,
-                  content_summary=content[:1200],
-                  detected_rates=clean_rates,
-                  current_decree_rate=clean_rates[-1] if clean_rates else "Tespit edilemedi"
-              )
-
           async def perform_analysis():
               """Ana analiz sürecini yönetir."""
               if not GEMINI_API_KEY:
                   return {"last_run": datetime.now().isoformat(), "report": "Hata: GEMINI_API_KEY ayarlanmamış."}
 
-              headers = {
-                  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-              }
-              
-              try:
-                  async with httpx.AsyncClient(timeout=60.0, follow_redirects=True, headers=headers) as client:
-                      # 1. PDF İndirme (Yeniden deneme mekanizması ile)
-                      print(f"PDF indiriliyor: {PDF_URL}")
-                      r = await make_request_with_retry(client, "GET", PDF_URL)
-                      print("PDF başarıyla indirildi.")
+              prompt = (
+                  "6183 sayılı Amme Alacaklarının Tahsil Usulü Hakkında Kanun'un 51. maddesine göre "
+                  "güncel aylık gecikme zammı oranı yüzde kaçtır? "
+                  "Lütfen SADECE rakam olarak (Örn: 4.5) yanıt ver."
+              )
 
-                      # 2. PDF İşleme
-                      pdf = io.BytesIO(r.content)
-                      reader = PdfReader(pdf)
-                      raw_text = "".join([(page.extract_text() or "") for page in reader.pages[:45]])
-                      if not raw_text or not raw_text.strip():
-                          raise Exception("PDF'den metin ayıklanamadı.")
-                  
-                  # 2. Analiz ve AI Doğrulama
-                  result = analyze_text(raw_text)
-                  if result.found and result.content_summary:
-                      label, prompt = await verify_with_ai(result.content_summary)
-                      result.official_confirmation = label
-                      result.ai_prompt = prompt
+              try:
+                  async with httpx.AsyncClient() as client:
+                      raw_response, error = await call_gemini_api(prompt, client)
+
+                  if error:
+                      result = AnalysisResult(error=error, ai_prompt=prompt)
+                  else:
+                      match = re.search(r"(\d+(?:[.,]\d+)?)", raw_response)
+                      rate_value = match.group(1).replace(",", ".") if match else "Bulunamadı"
+                      result = AnalysisResult(rate=rate_value, ai_prompt=prompt, raw_ai_response=raw_response)
                   
                   return {"last_run": datetime.now().isoformat(), "report": result}
 
@@ -179,7 +131,7 @@ jobs:
               # Pydantic modelini JSON'a çevir
               def json_converter(o):
                   if isinstance(o, BaseModel):
-                      return o.model_dump()
+                      return o.model_dump(exclude_none=True)
                   if isinstance(o, datetime):
                       return o.isoformat()
                   return str(o)
