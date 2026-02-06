@@ -32,10 +32,6 @@ jobs:
 
       - name: Mevzuat Analizini Çalıştır ve Raporu Oluştur
         id: analyze_script
-        env:
-          # API anahtarını GitHub Secrets'tan güvenli bir şekilde alıyoruz.
-          # Repo Ayarları > Secrets and variables > Actions > New repository secret
-          GEMINI_API_KEY: ${{ AIzaSyAMq4AXvIehXlakAaKuErCQZnvNKA-HOZ0 }}
         run: |
           # Bu adım, mevzuat-api.py dosyasından bağımsız olarak çalışır.
           # Tüm mantık bu YAML dosyasının içindedir.
@@ -64,7 +60,8 @@ jobs:
 
           # --- Sabitler ---
           PDF_URL = "https://www.mevzuat.gov.tr/MevzuatMetin/1.3.6183.pdf"
-          GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+          # GÜVENLİK UYARISI: API anahtarı doğrudan koda eklenmiştir. Bu reponun gizli olduğundan emin olun.
+          GEMINI_API_KEY = "AIzaSyAMq4AXvIehXlakAaKuErCQZnvNKA-HOZ0"
 
           # --- Fonksiyonlar ---
           async def call_gemini_api(prompt: str):
