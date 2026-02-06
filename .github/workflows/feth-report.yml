@@ -59,13 +59,29 @@ jobs:
 
           # --- Fonksiyonlar ---
           async def make_request_with_retry(client, method: str, url: str, retries=3, backoff_factor=1.0, **kwargs):
-              """Ağ hatalarına karşı yeniden deneme mekanizması ile HTTP isteği yapar."""
+              """Ağ hatalarına ve hız limitlerine karşı yeniden deneme mekanizması ile HTTP isteği yapar."""
               for i in range(retries):
                   try:
                       resp = await client.request(method, url, **kwargs)
                       resp.raise_for_status()  # HTTP 4xx veya 5xx hatalarında exception fırlatır
                       return resp
-                  except (httpx.TimeoutException, httpx.NetworkError) as e:
+                  except httpx.HTTPStatusError as e:
+                      # 429 (Too Many Requests) hatasını özel olarak ele al
+                      if e.response.status_code == 429:
+                          if i == retries - 1:
+                              raise e
+                          try:
+                              error_data = e.response.json()
+                              retry_delay_str = error_data.get("error", {}).get("details", [{}])[0].get("retryDelay", "20s")
+                              wait_time = int(re.search(r'(\d+)', retry_delay_str).group(1)) + 1 # Saniyeyi al ve 1 ekle
+                              print(f"Hız limiti aşıldı (429). API'nin önerdiği süre bekleniyor: {wait_time} saniye...")
+                              await asyncio.sleep(wait_time)
+                              continue # Döngünün başına dön ve tekrar dene
+                          except (json.JSONDecodeError, IndexError, AttributeError):
+                              pass # Hata parse edilemezse normal backoff'a devam et
+                      else: # Diğer HTTP hatalarında yeniden deneme yapma
+                          raise e
+                  except (httpx.TimeoutException, httpx.NetworkError, httpx.ConnectError) as e:
                       if i == retries - 1: # Son denemede de hata olursa
                           raise e
                       wait_time = backoff_factor * (2 ** i)
