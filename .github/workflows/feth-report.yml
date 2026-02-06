@@ -35,7 +35,7 @@ jobs:
         env:
           # API anahtarını GitHub Secrets'tan güvenli bir şekilde alıyoruz.
           # Repo Ayarları > Secrets and variables > Actions > New repository secret
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.AIzaSyAMq4AXvIehXlakAaKuErCQZnvNKA-HOZ0 }}
         run: |
           # Bu adım, mevzuat-api.py dosyasından bağımsız olarak çalışır.
           # Tüm mantık bu YAML dosyasının içindedir.
