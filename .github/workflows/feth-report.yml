@@ -64,22 +64,35 @@ jobs:
           GEMINI_API_KEY = "AIzaSyAMq4AXvIehXlakAaKuErCQZnvNKA-HOZ0"
 
           # --- Fonksiyonlar ---
-          async def call_gemini_api(prompt: str):
-              """Gemini API'sine istek atar."""
-              # En güncel ve stabil modeli kullanıyoruz.
+          async def make_request_with_retry(client, method: str, url: str, retries=3, backoff_factor=1.0, **kwargs):
+              """Ağ hatalarına karşı yeniden deneme mekanizması ile HTTP isteği yapar."""
+              for i in range(retries):
+                  try:
+                      resp = await client.request(method, url, **kwargs)
+                      resp.raise_for_status()  # HTTP 4xx veya 5xx hatalarında exception fırlatır
+                      return resp
+                  except (httpx.TimeoutException, httpx.NetworkError) as e:
+                      if i == retries - 1: # Son denemede de hata olursa
+                          raise e
+                      wait_time = backoff_factor * (2 ** i)
+                      print(f"İstek hatası: {e}. {wait_time:.2f} saniye sonra yeniden denenecek ({i+1}/{retries})...")
+                      await asyncio.sleep(wait_time)
+              raise Exception("Tüm yeniden denemeler başarısız oldu.")
+
+          async def call_gemini_api(prompt: str, client: httpx.AsyncClient):
+              """Gemini API'sine yeniden deneme mekanizması ile istek atar."""
               model_name = "models/gemini-1.5-flash"
-              url = f"https://generativelanguage.googleapis.com/v1beta/{model_name}:generateContent?key={GEMINI_API_KEY}"
+              api_url = f"https://generativelanguage.googleapis.com/v1beta/{model_name}:generateContent?key={GEMINI_API_KEY}"
               payload = {"contents": [{"parts": [{"text": prompt}]}]}
               
-              async with httpx.AsyncClient() as client:
-                  try:
-                      resp = await client.post(url, json=payload, timeout=45.0)
-                      if resp.status_code == 200:
-                          data = resp.json()
-                          return data['candidates'][0]['content']['parts'][0]['text'].strip(), None
-                      return None, f"API Hatası: {resp.status_code} - {resp.text}"
-                  except Exception as e:
-                      return None, f"Bağlantı Hatası: {str(e)}"
+              try:
+                  resp = await make_request_with_retry(client, "POST", api_url, json=payload, timeout=45.0)
+                  data = resp.json()
+                  return data['candidates'][0]['content']['parts'][0]['text'].strip(), None
+              except httpx.HTTPStatusError as e:
+                  return None, f"Gemini API Hatası: {e.response.status_code} - {e.response.text}"
+              except Exception as e:
+                  return None, f"Gemini API Bağlantı Hatası: {str(e)}"
 
           async def verify_with_ai(text: str):
               """AI ile metni doğrular."""
@@ -87,13 +100,15 @@ jobs:
                   f"Aşağıdaki 6183 sayılı kanun metninde (Madde 51) geçen güncel aylık gecikme zammı oranını tespit et. "
                   f"Lütfen SADECE rakam olarak (Örn: 4.5) yanıt ver. Metin: {text[:1500]}"
               )
-              raw_res, err = await call_gemini_api(prompt)
-              if err:
-                  return None, prompt, err
-              
-              match = re.search(r"(\d+(?:[.,]\d+)?)", raw_res)
-              val = match.group(1).replace(",", ".") if match else "Bulunamadı"
-              return f"{val} (AI Onayı)", prompt
+              # Bu fonksiyon içinde kendi client'ını oluşturarak izole bir istek yapar
+              async with httpx.AsyncClient() as client:
+                  raw_res, err = await call_gemini_api(prompt, client)
+                  if err:
+                      return None, prompt, err
+                  
+                  match = re.search(r"(\d+(?:[.,]\d+)?)", raw_res)
+                  val = match.group(1).replace(",", ".") if match else "Bulunamadı"
+                  return f"{val} (AI Onayı)", prompt
 
           def analyze_text(text: str):
               """Metin içinden Madde 51'i ve oranları çıkarır."""
@@ -125,14 +140,17 @@ jobs:
               }
               
               try:
-                  # 1. PDF İndirme ve İşleme
                   async with httpx.AsyncClient(timeout=60.0, follow_redirects=True, headers=headers) as client:
-                      r = await client.get(PDF_URL)
-                      r.raise_for_status()
+                      # 1. PDF İndirme (Yeniden deneme mekanizması ile)
+                      print(f"PDF indiriliyor: {PDF_URL}")
+                      r = await make_request_with_retry(client, "GET", PDF_URL)
+                      print("PDF başarıyla indirildi.")
+
+                      # 2. PDF İşleme
                       pdf = io.BytesIO(r.content)
                       reader = PdfReader(pdf)
                       raw_text = "".join([(page.extract_text() or "") for page in reader.pages[:45]])
-                      if not raw_text.strip():
+                      if not raw_text or not raw_text.strip():
                           raise Exception("PDF'den metin ayıklanamadı.")
                   
                   # 2. Analiz ve AI Doğrulama
@@ -144,6 +162,8 @@ jobs:
                   
                   return {"last_run": datetime.now().isoformat(), "report": result}
 
+              except httpx.TimeoutException as e:
+                  raise Exception(f"Ağ zaman aşımı: {e.request.url} adresine bağlanılamadı.") from e
               except Exception as e:
                   error_detail = traceback.format_exc()
                   return {
