@@ -1,0 +1,187 @@
+# .github/workflows/fetch-report.yml
+
+name: Mevzuat Raporunu Oluştur (Bağımsız)
+
+# Repoya yazma izni veriyoruz ki report.json dosyasını commit'leyebilsin.
+permissions:
+  contents: write
+
+on:
+  # Zamanlanmış görev: Her gün sabah 06:00'da (TSİ) çalışır.
+  schedule:
+    - cron: "0 3 * * *"
+  # Manuel tetikleme: GitHub Actions arayüzünden elle çalıştırabilmek için.
+  workflow_dispatch:
+
+jobs:
+  build-report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Depoyu Kopyala
+        uses: actions/checkout@v4
+
+      - name: Python 3.10 Kurulumu
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Gerekli Python Kütüphanelerini Yükle
+        run: |
+          python -m pip install --upgrade pip
+          pip install httpx "pypdf[crypto]" pydantic
+
+      - name: Mevzuat Analizini Çalıştır ve Raporu Oluştur
+        id: analyze_script
+        env:
+          # API anahtarını GitHub Secrets'tan güvenli bir şekilde alıyoruz.
+          # Repo Ayarları > Secrets and variables > Actions > New repository secret
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          # Bu adım, mevzuat-api.py dosyasından bağımsız olarak çalışır.
+          # Tüm mantık bu YAML dosyasının içindedir.
+          python - <<'EOF'
+          import io
+          import re
+          import os
+          import httpx
+          import asyncio
+          import traceback
+          import json
+          from pypdf import PdfReader
+          from typing import Optional, List
+          from datetime import datetime
+          from pydantic import BaseModel, Field
+
+          # --- Modeller ---
+          class AnalysisResult(BaseModel):
+              found: bool
+              content_summary: Optional[str] = None
+              detected_rates: List[str] = Field(default_factory=list)
+              current_decree_rate: Optional[str] = None
+              official_confirmation: Optional[str] = None
+              ai_prompt: Optional[str] = None
+              error: Optional[str] = None
+
+          # --- Sabitler ---
+          PDF_URL = "https://www.mevzuat.gov.tr/MevzuatMetin/1.3.6183.pdf"
+          GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+          # --- Fonksiyonlar ---
+          async def call_gemini_api(prompt: str):
+              """Gemini API'sine istek atar."""
+              # En güncel ve stabil modeli kullanıyoruz.
+              model_name = "models/gemini-1.5-flash"
+              url = f"https://generativelanguage.googleapis.com/v1beta/{model_name}:generateContent?key={GEMINI_API_KEY}"
+              payload = {"contents": [{"parts": [{"text": prompt}]}]}
+              
+              async with httpx.AsyncClient() as client:
+                  try:
+                      resp = await client.post(url, json=payload, timeout=45.0)
+                      if resp.status_code == 200:
+                          data = resp.json()
+                          return data['candidates'][0]['content']['parts'][0]['text'].strip(), None
+                      return None, f"API Hatası: {resp.status_code} - {resp.text}"
+                  except Exception as e:
+                      return None, f"Bağlantı Hatası: {str(e)}"
+
+          async def verify_with_ai(text: str):
+              """AI ile metni doğrular."""
+              prompt = (
+                  f"Aşağıdaki 6183 sayılı kanun metninde (Madde 51) geçen güncel aylık gecikme zammı oranını tespit et. "
+                  f"Lütfen SADECE rakam olarak (Örn: 4.5) yanıt ver. Metin: {text[:1500]}"
+              )
+              raw_res, err = await call_gemini_api(prompt)
+              if err:
+                  return None, prompt, err
+              
+              match = re.search(r"(\d+(?:[.,]\d+)?)", raw_res)
+              val = match.group(1).replace(",", ".") if match else "Bulunamadı"
+              return f"{val} (AI Onayı)", prompt
+
+          def analyze_text(text: str):
+              """Metin içinden Madde 51'i ve oranları çıkarır."""
+              normalized = re.sub(r'\s+', ' ', text)
+              pattern = re.compile(r"Madde\s*51[:\-\s\.].*?(?=Madde\s+\d+|$)", re.IGNORECASE | re.DOTALL)
+              match = pattern.search(normalized)
+              
+              if not match:
+                  return AnalysisResult(found=False, error="Madde 51 bulunamadı.")
+
+              content = match.group(0).strip()
+              rates = re.findall(r"%\s*(\d+(?:[.,]\d+)?)", content)
+              clean_rates = [str(float(r.replace(",", "."))) for r in rates if 0.5 <= float(r.replace(",", ".")) <= 10.0]
+              
+              return AnalysisResult(
+                  found=True,
+                  content_summary=content[:1200],
+                  detected_rates=clean_rates,
+                  current_decree_rate=clean_rates[-1] if clean_rates else "Tespit edilemedi"
+              )
+
+          async def perform_analysis():
+              """Ana analiz sürecini yönetir."""
+              if not GEMINI_API_KEY:
+                  return {"last_run": datetime.now().isoformat(), "report": "Hata: GEMINI_API_KEY ayarlanmamış."}
+
+              headers = {
+                  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+              }
+              
+              try:
+                  # 1. PDF İndirme ve İşleme
+                  async with httpx.AsyncClient(timeout=60.0, follow_redirects=True, headers=headers) as client:
+                      r = await client.get(PDF_URL)
+                      r.raise_for_status()
+                      pdf = io.BytesIO(r.content)
+                      reader = PdfReader(pdf)
+                      raw_text = "".join([(page.extract_text() or "") for page in reader.pages[:45]])
+                      if not raw_text.strip():
+                          raise Exception("PDF'den metin ayıklanamadı.")
+                  
+                  # 2. Analiz ve AI Doğrulama
+                  result = analyze_text(raw_text)
+                  if result.found and result.content_summary:
+                      label, prompt = await verify_with_ai(result.content_summary)
+                      result.official_confirmation = label
+                      result.ai_prompt = prompt
+                  
+                  return {"last_run": datetime.now().isoformat(), "report": result}
+
+              except Exception as e:
+                  error_detail = traceback.format_exc()
+                  return {
+                      "last_run": datetime.now().isoformat(), 
+                      "report": f"Kritik Hata: {str(e)} | Detay: {error_detail.splitlines()[-1]}"
+                  }
+
+          async def main():
+              """Scriptin ana giriş noktası."""
+              print("Mevzuat analizi başlatılıyor...")
+              report_data = await perform_analysis()
+              
+              # Pydantic modelini JSON'a çevir
+              def json_converter(o):
+                  if isinstance(o, BaseModel):
+                      return o.model_dump()
+                  if isinstance(o, datetime):
+                      return o.isoformat()
+                  return str(o)
+
+              with open("report.json", "w", encoding="utf-8") as f:
+                  json.dump(report_data, f, ensure_ascii=False, indent=2, default=json_converter)
+              
+              print("report.json dosyası başarıyla oluşturuldu.")
+
+          if __name__ == "__main__":
+              asyncio.run(main())
+          EOF
+
+      - name: Değişiklikleri Commit'le ve Push'la
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add report.json
+          # Sadece `report.json` dosyasında değişiklik varsa commit yap.
+          # Değişiklik yoksa hata vermeden işlemi bitir.
+          git diff --staged --quiet || git commit -m "Mevzuat Raporu Güncellendi: $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
+          git push
