@@ -1,4 +1,7 @@
 {
-  "last_run": "2026-02-06T13:18:24.559438",
-  "report": "Kritik Hata:  | Detay: httpx.ConnectTimeout"
+  "last_run": "2026-02-06T13:24:14.193321",
+  "report": {
+    "ai_prompt": "6183 sayılı Amme Alacaklarının Tahsil Usulü Hakkında Kanun'un 51. maddesine göre güncel aylık gecikme zammı oranı yüzde kaçtır? Lütfen SADECE rakam olarak (Örn: 4.5) yanıt ver.",
+    "error": "Gemini API Hatası: 404 - {\n  \"error\": {\n    \"code\": 404,\n    \"message\": \"models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.\",\n    \"status\": \"NOT_FOUND\"\n  }\n}\n"
+  }
 }
