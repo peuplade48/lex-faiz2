@@ -12,16 +12,7 @@ async function run() {
             contents: [{
                 parts: [{
                     text: `Aşağıdaki 6183 sayılı kanun metninde (Madde 51) geçen güncel aylık gecikme zammı oranını tespit et. "
-        f"Lütfen SADECE rakam olarak (Örn: 4.5) yanıt ver. Metin: {text[:1200]}
-
-                    Yanıtı sadece bu JSON yapısında ver:
-                    {
-                      "analiz_metodolojisi": "Dipnot kronolojisi takip edildi.",
-                      "tespit_edilen_oran": "...",
-                      "dayanak_dipnot_no": "...",
-                      "ozgun_ekonomik_yorum": "...",
-                      "tarih": "2026-02-09"
-                    }`
+        f"Lütfen SADECE rakam olarak (Örn: 4.5) yanıt ver. Metin: {text[:1200]}`
                 }]
             }]
         };
