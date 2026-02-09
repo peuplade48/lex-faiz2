@@ -11,19 +11,8 @@ async function run() {
         const prompt = {
             contents: [{
                 parts: [{
-                    text: `Sen bir Mevzuat Denetçisisin. 
-                    Kaynak: https://www.mevzuat.gov.tr/MevzuatMetin/1.3.6183.pdf
-                    
-                    Görevin:
-                    1. 51. madde metnini oku. Ancak orada yazan rakamla yetinme.
-                    2. Madde numarasının yanındaki veya metin içindeki dipnot numaralarını (1, 2, 3...) takip et.
-                    3. PDF'in en sonundaki "LİSTE" veya "DİPNOTLAR" kısmına git. 51. maddeye ilişkin en son tarihli değişikliği yapan Cumhurbaşkanı Kararı (CK) bilgisini ve orada belirtilen yeni oranı bul.
-                    4. Tarihsel kronolojiyi kur: 2023 (%3,5) -> 2024 (%4,5) -> ve varsa 2025 sonundaki en güncel adım.
-                    
-                    Senden sadece kendi bulduğun verilerle şu analizi bekliyorum:
-                    - Bulduğun en güncel oran nedir?
-                    - Bu oranı PDF'in hangi sayfasındaki veya hangi dipnotundaki veriye dayanarak buldun? (Kanıt göster)
-                    - Devletin bu oranı son dönemde neden değiştirdiğine dair özgün, piyasa faizleriyle tutarlı bir yorum yap.
+                    text: `Aşağıdaki 6183 sayılı kanun metninde (Madde 51) geçen güncel aylık gecikme zammı oranını tespit et. "
+        f"Lütfen SADECE rakam olarak (Örn: 4.5) yanıt ver. Metin: {text[:1200]}
 
                     Yanıtı sadece bu JSON yapısında ver:
                     {
