@@ -1,48 +1,61 @@
 const fs = require('fs');
 
-async function getGeminiData() {
+async function fetchGeminiReport() {
     const apiKey = process.env.GEMINI_API_KEY;
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`;
+    if (!apiKey) {
+        console.error("HATA: GEMINI_API_KEY eksik! Lütfen GitHub Secrets ayarlarını kontrol edin.");
+        process.exit(1);
+    }
 
-    const prompt = "6183 sayılı Kanun'un 51. maddesindeki gecikme zammı oranının bugünkü (Şubat 2026) güncel değerini bul. Bu oranı ekonomik bağlamda yorumla ve sadece şu formatta JSON döndür: {\"oran\": \"...\", \"yorum\": \"...\", \"kaynak\": \"...\", \"tarih\": \"...\"}";
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
-    const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }]
-        })
-    });
+    const prompt = `
+      6183 sayılı Kanun'un 51. maddesindeki güncel gecikme zammı oranını (2026 yılı için) tespit et. 
+      Ekonomik bir yorumla birlikte sadece şu JSON formatında yanıt ver:
+      {
+        "oran": "...",
+        "yorum": "...",
+        "tarih": "${new Date().toISOString()}"
+      }
+    `;
 
-    const data = await response.json();
-    // Gemini'dan gelen text'i parse ediyoruz
-    const rawText = data.candidates[0].content.parts[0].text;
-    return JSON.parse(rawText.substring(rawText.indexOf('{'), rawText.lastIndexOf('}') + 1));
-}
-
-async function run() {
     try {
-        const reportData = await getGeminiData();
-        console.log("Gemini'dan gelen veriler alındı.");
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }]
+            })
+        });
 
-        // 1. Dış API'ye Report Etme
-        if (process.env.REPORT_API_URL) {
-            await fetch(process.env.REPORT_API_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(reportData)
-            });
-            console.log("Dış API'ye raporlandı.");
+        const data = await response.json();
+
+        // API Hata kontrolü
+        if (data.error) {
+            console.error("API Hatası:", data.error.message);
+            process.exit(1);
         }
 
-        // 2. report.json Dosyasına Yazma
-        fs.writeFileSync('report.json', JSON.stringify(reportData, null, 2));
-        console.log("report.json güncellendi.");
+        // Yanıt yapısı kontrolü
+        if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
+            console.error("Gemini geçerli bir yanıt dönmedi. Dönen veri:", JSON.stringify(data));
+            process.exit(1);
+        }
+
+        const textResponse = data.candidates[0].content.parts[0].text;
+        const jsonMatch = textResponse.match(/\{[\s\S]*\}/);
+
+        if (jsonMatch) {
+            fs.writeFileSync('report.json', jsonMatch[0]);
+            console.log("Rapor başarıyla 'report.json' dosyasına yazıldı.");
+        } else {
+            console.error("Yanıt içinde JSON bulunamadı:", textResponse);
+        }
 
     } catch (error) {
-        console.error("Hata:", error);
+        console.error("Beklenmedik bir hata oluştu:", error.message);
         process.exit(1);
     }
 }
 
-run();
+fetchGeminiReport();
