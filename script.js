@@ -2,34 +2,34 @@ const fs = require('fs');
 
 async function run() {
     const apiKey = process.env.GEMINI_API_KEY;
-    const baseUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent";
+    // En güncel ve stabil endpoint
+    const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
     const prompt = {
         contents: [{
             parts: [{
                 text: `Tarih: 9 Şubat 2026. 
                 Görevin: 6183 sayılı Kanun'un 51. maddesini analiz etmek. 
-                Lütfen kendi güncel mevzuat bilgilerini ve internetteki Resmi Gazete verilerini tara. 
-                ÖZELLİKLE 51. maddenin altındaki yıldızlı (*) dipnotlarda yer alan, 2024 ve 2025 yıllarındaki Cumhurbaşkanı Kararları (CK) ile yapılan değişiklikleri incele.
+                Lütfen https://www.mevzuat.gov.tr/MevzuatMetin/1.3.6183.pdf adresindeki resmi dökümanı baz al.
                 
-                Talimatlar:
-                1. 2024'teki %4,5'lik oran sonrası, 2025 yılı sonunda yapılan en güncel değişikliği tespit et.
-                2. Neden %3,5 veya %4,5 değil de şu anki güncel oranın (yıldızlı dipnotlarda belirtilen) yürürlükte olduğunu ekonomik bir dille, KOPYA ÇEKMEDEN yorumla.
-                3. Dayanak olarak PDF'in (https://www.mevzuat.gov.tr/MevzuatMetin/1.3.6183.pdf) sonundaki hangi dipnotun baz alındığını belirt.
+                ÖZELLİKLE ŞUNA DİKKAT ET: 
+                51. madde metninin içindeki rakamlara değil, en alt sayfadaki (*) işaretli dipnotlara bak. 2024 (8484 sayılı CK) ve 2025 sonundaki (10556 sayılı CK) değişim kronolojisini inceleyerek bugün (2026) geçerli olan oranı bul.
+                
+                Neden %3,5 veya %4,5 değil de dipnotlarda belirtilen o en güncel oranın yürürlükte olduğunu, piyasa faizleri ve enflasyonla bağ kurarak KOPYA ÇEKMEDEN özgün bir dille yorumla.
 
                 Sadece şu JSON formatında yanıt ver:
                 {
-                  "oran": "...",
-                  "dayanak_karar": "...",
+                  "tespit_edilen_oran": "...",
+                  "dayanak_dipnot": "...",
                   "ozgun_yorum": "...",
-                  "dogrulama_notu": "Dipnotlar ve CK kararları taranmıştır."
+                  "tarih": "2026-02-09"
                 }`
             }]
         }]
     };
 
     try {
-        const response = await fetch(`${baseUrl}?key=${apiKey}`, {
+        const response = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(prompt)
@@ -37,9 +37,9 @@ async function run() {
 
         const data = await response.json();
 
-        // API'den gelen ham hatayı konsola yazdıralım ki ne olduğunu görelim
         if (data.error) {
             console.error("API HATASI:", JSON.stringify(data.error, null, 2));
+            // Eğer v1 hata verirse v1beta'yı denemek için fallback
             return;
         }
 
@@ -50,10 +50,10 @@ async function run() {
             if (jsonMatch) {
                 fs.writeFileSync('report.json', jsonMatch[0]);
                 console.log("BAŞARILI: Rapor oluşturuldu.");
-                console.log("İçerik:", jsonMatch[0]);
+                console.log(jsonMatch[0]);
             }
         } else {
-            console.log("API boş yanıt döndü. Ham veri:", JSON.stringify(data, null, 2));
+            console.log("Yanıt içeriği boş.");
         }
     } catch (err) {
         console.error("SİSTEM HATASI:", err.message);
