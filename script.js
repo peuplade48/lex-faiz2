@@ -4,57 +4,69 @@ async function run() {
     const apiKey = process.env.GEMINI_API_KEY;
     const baseUrl = "https://generativelanguage.googleapis.com/v1beta";
 
+    if (!apiKey) {
+        console.error("HATA: GEMINI_API_KEY bulunamadı!");
+        process.exit(1);
+    }
+
     try {
-        // 1. ADIM: Kullanılabilir modelleri API'den soralım
-        console.log("Kullanılabilir modeller listeleniyor...");
+        // 1. ADIM: Mevcut modelleri listele ve en uygununu seç
         const listResponse = await fetch(`${baseUrl}/models?key=${apiKey}`);
         const listData = await listResponse.json();
 
-        if (listData.error) {
-            throw new Error(`Model listeleme hatası: ${listData.error.message}`);
-        }
+        if (listData.error) throw new Error(`Model listeleme hatası: ${listData.error.message}`);
 
-        // generateContent destekleyen ilk 'gemini' modelini seçelim
-        const availableModel = listData.models.find(m => 
-            m.name.includes('gemini') && 
-            m.supportedGenerationMethods.includes('generateContent')
+        const selectedModel = listData.models.find(m => 
+            m.name.includes('gemini-1.5-flash') || m.name.includes('gemini-pro')
         );
 
-        if (!availableModel) {
-            throw new Error("Hesabınızda uygun Gemini modeli bulunamadı.");
-        }
+        if (!selectedModel) throw new Error("Uygun bir Gemini modeli bulunamadı.");
+        console.log(`Kullanılan Model: ${selectedModel.name}`);
 
-        const modelName = availableModel.name; // Örn: "models/gemini-1.5-flash-latest"
-        console.log(`Uygun model bulundu: ${modelName}. Analiz başlıyor...`);
-
-        // 2. ADIM: Raporu seçilen modelle alalım
+        // 2. ADIM: Madde dipnotlarına ve güncel CK kararlarına odaklanan Prompt
         const prompt = {
             contents: [{
                 parts: [{
-                    text: "6183 sayılı Kanun'un 51. maddesindeki güncel gecikme zammı oranını bul. Ekonomik bir yorumla birlikte sadece şu JSON formatında döndür: {\"oran\": \"...\", \"yorum\": \"...\", \"tarih\": \"2026-02-09\"}"
+                    text: `6183 sayılı Kanun'un 51. maddesini analiz et. 
+                    ÖZELLİKLE madde metninin altındaki dipnotları (*), yıldızla belirtilmiş alanları ve parantez içi hükümleri tarayarak en güncel gecikme zammı oranını bul.
+                    
+                    Bilgi Notu: 21 Mayıs 2024 tarihli Resmi Gazete'de yayımlanan 8484 sayılı Cumhurbaşkanı Kararı ile oran güncellenmiştir. 
+                    
+                    Lütfen bu güncel durumu ve ekonomik etkisini yorumlayarak sadece şu JSON formatında yanıt ver:
+                    {
+                      "kanun_madde": "6183 Sayılı Kanun Madde 51",
+                      "guncel_oran_aylik": "%...",
+                      "dayanak_cumhurbaskani_karari": "...",
+                      "analiz_ve_yorum": "...",
+                      "rapor_tarihi": "${new Date().toISOString().split('T')[0]}"
+                    }`
                 }]
             }]
         };
 
-        const genResponse = await fetch(`${baseUrl}/${modelName}:generateContent?key=${apiKey}`, {
+        // 3. ADIM: Gemini API'den raporu al
+        const genResponse = await fetch(`${baseUrl}/${selectedModel.name}:generateContent?key=${apiKey}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(prompt)
         });
 
         const genData = await genResponse.json();
-        
         if (genData.error) throw new Error(genData.error.message);
 
         const textResponse = genData.candidates[0].content.parts[0].text;
+        
+        // JSON formatını temizle (Markdown tag'lerini kaldır)
         const jsonMatch = textResponse.match(/\{[\s\S]*\}/);
 
         if (jsonMatch) {
-            fs.writeFileSync('report.json', jsonMatch[0]);
-            console.log("BAŞARILI: Rapor report.json dosyasına kaydedildi.");
+            const finalData = jsonMatch[0];
+            fs.writeFileSync('report.json', finalData);
+            console.log("BAŞARILI: Güncel rapor 'report.json' dosyasına yazıldı.");
+            console.log("İçerik:", finalData);
         } else {
-            console.log("Ham Yanıt:", textResponse);
-            throw new Error("JSON formatı ayıklanamadı.");
+            console.error("JSON ayıklanamadı. Ham yanıt:", textResponse);
+            process.exit(1);
         }
 
     } catch (err) {
