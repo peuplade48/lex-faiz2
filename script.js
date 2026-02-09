@@ -2,43 +2,55 @@ const fs = require('fs');
 
 async function run() {
     const apiKey = process.env.GEMINI_API_KEY;
-    const baseUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent";
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
     const prompt = {
         contents: [{
             parts: [{
-                text: `DİKKAT: Önceki raporun tamamen hatalı. 8109 sayılı %4,5'lik bir kararname mevcut değildir, bu bir halüsinasyondur. 
+                text: `GÖREV: https://www.mevzuat.gov.tr/MevzuatMetin/1.3.6183.pdf adresindeki dokümanın en son sayfalarında yer alan 'LİSTE' veya 'DİPNOTLAR' kısmını tara.
                 
-                TALİMAT:
-                1. Şu an 9 Şubat 2026 tarihindeyiz. 
-                2. Google Search kullanarak '6183 sayılı Kanun 51. madde güncel gecikme zammı Kasım 2025' araması yap.
-                3. Kasım 2025'te yayımlanan ve oranı %3,7'ye indiren GERÇEK Cumhurbaşkanı Kararı'nı bul.
-                4. Neden uydurma veri verdiğini açıkla ve gerçek veriyle yeni bir ekonomik analiz yap.
+                KRİTİK UYARI: Daha önce 8109 sayılı bir kararla %4,5 oranı uyduruldu. Bu veri yanlıştır. 
+                
+                GERÇEK ARAMA ADIMLARI:
+                1. 51. maddeye ilişkin yapılan son değişikliği bul (Kasım 2025 tarihli kararı ara).
+                2. Oranın %3,7'ye revize edildiğini bu dipnotlardan teyit et.
+                3. Neden %4,5'ten %3,7'ye inildiğini, 2026 başındaki dezenflasyon hedefleriyle bağ kurarak 'kopya çekmeden' analiz et.
 
-                JSON formatında yanıt ver:
+                SADECE JSON YANIT VER:
                 {
-                  "hata_itirafi": "Önceki verinin uydurma olduğunu kabul ediyorum.",
-                  "gercek_oran": "%3,7",
-                  "dogru_dayanak": "Kasım 2025 tarihli Karar",
-                  "analiz": "..."
+                  "tespit_edilen_oran": "...",
+                  "gercek_dayanak_karar": "...",
+                  "ekonomik_analiz": "...",
+                  "dogrulama": "PDF son sayfa dipnotları taranmıştır."
                 }`
             }]
-        }],
-        tools: [{ google_search_retrieval: {} }] // Arama motorunu zorunlu kılıyoruz
+        }]
     };
 
     try {
-        const response = await fetch(`${baseUrl}?key=${apiKey}`, {
+        const response = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(prompt)
         });
+
         const data = await response.json();
-        const text = data.candidates[0].content.parts[0].text;
-        fs.writeFileSync('report.json', text.match(/\{[\s\S]*\}/)[0]);
-        console.log("Gemini hatasını düzeltti ve güncel veriyi aradı.");
+
+        // TypeError'u engelleyen kontrol
+        if (data.candidates && data.candidates[0].content && data.candidates[0].content.parts) {
+            const textResponse = data.candidates[0].content.parts[0].text;
+            const jsonMatch = textResponse.match(/\{[\s\S]*\}/);
+
+            if (jsonMatch) {
+                fs.writeFileSync('report.json', jsonMatch[0]);
+                console.log("Rapor güncellendi.");
+                console.log(jsonMatch[0]);
+            }
+        } else {
+            console.error("API Yanıtı Beklenen Formatın Dışında:", JSON.stringify(data));
+        }
     } catch (err) {
-        console.error(err);
+        console.error("Sistem Hatası:", err.message);
     }
 }
 run();
