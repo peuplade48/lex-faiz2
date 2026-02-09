@@ -2,68 +2,79 @@ const fs = require('fs');
 
 async function run() {
     const apiKey = process.env.GEMINI_API_KEY;
-    // API versiyonlarını ve modelleri denemek için liste
-    const versions = ['v1beta', 'v1'];
-    
-    let workingModel = null;
-    let workingVersion = null;
+    const baseUrl = "https://generativelanguage.googleapis.com/v1beta";
 
-    console.log("Uygun model aranıyor...");
-
-    for (const v of versions) {
-        try {
-            const listRes = await fetch(`https://generativelanguage.googleapis.com/${v}/models?key=${apiKey}`);
-            const listData = await listRes.json();
-            
-            if (listData.models) {
-                // generateContent destekleyen ilk gemini modelini bul
-                const found = listData.models.find(m => 
-                    m.supportedGenerationMethods.includes('generateContent') && 
-                    m.name.includes('gemini')
-                );
-                if (found) {
-                    workingModel = found.name;
-                    workingVersion = v;
-                    break;
-                }
-            }
-        } catch (e) { continue; }
-    }
-
-    if (!workingModel) {
-        console.error("HATA: Hesabınızda kullanılabilir bir Gemini modeli bulunamadı.");
+    if (!apiKey) {
+        console.error("HATA: GEMINI_API_KEY bulunamadı!");
         process.exit(1);
     }
 
-    console.log(`Bulunan Model: ${workingModel} (Versiyon: ${workingVersion})`);
-
-    const prompt = {
-        contents: [{
-            parts: [{
-                text: "6183 sayılı Kanun'un 51. maddesindeki güncel gecikme zammı oranını (21 Mayıs 2024 tarihli 8484 sayılı CK dahil) madde altındaki dipnotları tarayarak bul. Sadece şu JSON formatında yanıt ver: {\"oran\": \"...\", \"yorum\": \"...\", \"tarih\": \"2026-02-09\"}"
-            }]
-        }]
-    };
-
     try {
-        const response = await fetch(`https://generativelanguage.googleapis.com/${workingVersion}/${workingModel}:generateContent?key=${apiKey}`, {
+        // 1. ADIM: Mevcut modelleri listele ve en uygun olanı (Flash veya Pro) seç
+        const listResponse = await fetch(`${baseUrl}/models?key=${apiKey}`);
+        const listData = await listResponse.json();
+        
+        const selectedModel = listData.models.find(m => 
+            m.supportedGenerationMethods.includes('generateContent') && 
+            m.name.includes('gemini')
+        );
+
+        if (!selectedModel) throw new Error("Uygun bir Gemini modeli bulunamadı.");
+        console.log(`Kullanılan Model: ${selectedModel.name}`);
+
+        // 2. ADIM: Analitik ve Derinlemesine Tarama Yapan Prompt
+        // Burada oran belirtmiyoruz, Gemini'ın dipnotları (yıldızlı alanları) taramasını istiyoruz.
+        const prompt = {
+            contents: [{
+                parts: [{
+                    text: `Sen kıdemli bir hukuk ve ekonomi danışmanısın. 
+                    Görevin: 6183 sayılı Kanun'un 51. maddesini, madde metninin en altındaki tüm dipnotları (*), parantez içi hükümleri ve 2024'ten bugüne (Şubat 2026) kadar yayımlanmış olan en güncel Cumhurbaşkanı Kararlarını (CK) titizlikle taramak.
+                    
+                    Analiz Talimatı:
+                    1. 51. maddedeki gecikme zammı oranının şu an (2026 yılı başı itibarıyla) yürürlükte olan güncel değerini tespit et. (Eski 2024 verilerinde takılı kalma, mevzuat dipnotlarındaki son güncellemeyi bul).
+                    2. Bu oranı piyasa faiz oranları ve enflasyon konjonktürü ile kıyaslayarak özgün bir ekonomik yorum yap.
+                    3. Tespit ettiğin oranın hangi Resmi Gazete bilgisine veya Cumhurbaşkanı Kararına dayandığını belirt.
+                    
+                    Yanıtı sadece aşağıdaki JSON formatında ver, başka hiçbir metin ekleme:
+                    {
+                      "kanun_madde": "6183 / 51",
+                      "tespit_edilen_guncel_oran": "%...",
+                      "dayanak_mevzuat": "...",
+                      "ekonomik_analiz_ve_yorum": "...",
+                      "tarih": "${new Date().toISOString().split('T')[0]}"
+                    }`
+                }]
+            }]
+        };
+
+        // 3. ADIM: API İsteğini Gönder
+        const genResponse = await fetch(`${baseUrl}/${selectedModel.name}:generateContent?key=${apiKey}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(prompt)
         });
 
-        const data = await response.json();
-        if (data.error) throw new Error(data.error.message);
+        const genData = await genResponse.json();
+        if (genData.error) throw new Error(genData.error.message);
 
-        const textResponse = data.candidates[0].content.parts[0].text;
+        const textResponse = genData.candidates[0].content.parts[0].text;
+        
+        // JSON formatını temizle (Markdown tag'lerini ayıkla)
         const jsonMatch = textResponse.match(/\{[\s\S]*\}/);
 
         if (jsonMatch) {
-            fs.writeFileSync('report.json', jsonMatch[0]);
-            console.log("BAŞARILI: Rapor oluşturuldu.");
+            const finalJson = jsonMatch[0];
+            fs.writeFileSync('report.json', finalJson);
+            console.log("BAŞARILI: Analitik rapor 'report.json' dosyasına yazıldı.");
+            console.log("Rapor İçeriği:", finalJson);
+        } else {
+            console.error("HATA: Gemini JSON formatında yanıt dönmedi.");
+            console.log("Ham Yanıt:", textResponse);
+            process.exit(1);
         }
+
     } catch (err) {
-        console.error("İŞLEM HATASI:", err.message);
+        console.error("KRİTİK HATA:", err.message);
         process.exit(1);
     }
 }
