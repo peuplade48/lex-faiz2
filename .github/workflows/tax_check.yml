@@ -1,15 +1,17 @@
-name: 6183 Kanun Gecikme Zammı Takibi
+name: Gecikme Zammı Raporlayıcı
 
 on:
   schedule:
-    - cron: '0 0 * * 1' # Her Pazartesi gece yarısı çalışır
-  workflow_dispatch: # Manuel tetikleme için
+    - cron: '0 9 * * *' # Her sabah 09:00'da otomatik çalışır
+  workflow_dispatch: # İstediğiniz an manuel çalıştırmak için
 
 jobs:
-  check_and_report:
+  build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # Dosya yazabilmesi için gerekli izin
     steps:
-      - name: Checkout repository
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
       - name: Setup Node.js
@@ -17,16 +19,15 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Run Gemini Analysis Script
+      - name: Get Gemini Analysis
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          REPORT_API_URL: ${{ secrets.REPORT_API_URL }}
         run: node script.js
 
-      - name: Commit and Push Report
+      - name: Commit and Push Changes
         run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
           git add report.json
-          git commit -m "Güncel Gecikme Zammı Raporu: $(date +'%Y-%m-%d')" || exit 0
+          git commit -m "Güncel 6183/51 Raporu: $(date +'%d-%m-%Y')" || echo "Değişiklik yok."
           git push
