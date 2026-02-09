@@ -5,46 +5,36 @@ async function run() {
     const baseUrl = "https://generativelanguage.googleapis.com/v1beta";
 
     try {
-        // 1. ADIM: Mevcut ve çalışan model ismini bul
+        // 1. ADIM: Aktif modeli dinamik olarak bul (404 hatasını engellemek için)
         const listRes = await fetch(`${baseUrl}/models?key=${apiKey}`);
         const listData = await listRes.json();
-        
-        const activeModel = listData.models.find(m => 
-            m.supportedGenerationMethods.includes('generateContent') && 
-            m.name.includes('gemini-1.5-flash')
-        ) || listData.models.find(m => m.supportedGenerationMethods.includes('generateContent'));
+        const activeModel = listData.models.find(m => m.supportedGenerationMethods.includes('generateContent')).name;
 
-        if (!activeModel) {
-            console.error("Uygun model bulunamadı!");
-            return;
-        }
-        
-        const modelPath = activeModel.name; 
-        console.log(`Sistemde aktif olan model bulundu: ${modelPath}`);
-
-        // 2. ADIM: Analizi bu modelle yap
+        // 2. ADIM: Tamamen bağımsız analiz
         const prompt = {
             contents: [{
                 parts: [{
-                    text: `Analiz Tarihi: 9 Şubat 2026. 
-                    Kaynak: https://www.mevzuat.gov.tr/MevzuatMetin/1.3.6183.pdf
-
-                    GÖREV: 
-                    Daha önce verdiğin %4,5'lik oran hatalıdır (halüsinasyon). PDF'in en altındaki (*) işaretli dipnotları ve en sondaki değişiklik listesini tara. Kasım 2025'te oranı %3,7'ye indiren en güncel Cumhurbaşkanı Kararı'nı tespit et.
+                    text: `Analiz Kaynağı: https://www.mevzuat.gov.tr/MevzuatMetin/1.3.6183.pdf
                     
-                    Bu %3,7'lik güncel oranı baz alarak; neden bir faiz indirimine gidildiğini piyasa koşullarıyla (dezenflasyon, likidite vb.) kopya çekmeden analiz et.
+                    GÖREV:
+                    1. Dokümanın 51. maddesini bul, ancak ana metindeki eski oranlara (metin içindekilere) itibar etme.
+                    2. PDF'in EN SONUNDA yer alan "DİPNOTLAR" veya "İŞLENEMEYEN HÜKÜMLER" kısmındaki (*) işaretli kronolojik tabloyu tara.
+                    3. 2024 ve 2025 yıllarındaki Cumhurbaşkanı Kararları (CK) arasındaki en son değişikliği tespit et.
+                    4. Bulduğun bu EN GÜNCEL oranı ve resmi dayanağını raporla.
+                    5. Neden önceki oranlardan farklı bir seviyeye gelindiğini, 2026 başındaki ekonomik hedeflere göre KOPYA ÇEKMEDEN tamamen kendi mantığınla yorumla.
 
-                    Sadece JSON yanıt ver:
+                    Yanıtı sadece JSON olarak ver:
                     {
                       "tespit_edilen_oran": "...",
-                      "dayanak_dipnot": "...",
-                      "ozgun_yorum": "..."
+                      "dayanak_verisi": "...",
+                      "analiz_yontemi": "Sadece dipnot taraması yapıldı",
+                      "ozgun_ekonomik_analiz": "..."
                     }`
                 }]
             }]
         };
 
-        const response = await fetch(`${baseUrl}/${modelPath}:generateContent?key=${apiKey}`, {
+        const response = await fetch(`${baseUrl}/${activeModel}:generateContent?key=${apiKey}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(prompt)
@@ -56,11 +46,10 @@ async function run() {
 
         if (jsonMatch) {
             fs.writeFileSync('report.json', jsonMatch[0]);
-            console.log("BAŞARILI: Rapor güncel model ile oluşturuldu.");
-            console.log(jsonMatch[0]);
+            console.log("Bağımsız analiz tamamlandı. report.json güncellendi.");
         }
     } catch (err) {
-        console.error("KRİTİK HATA:", err.message);
+        console.error("Hata:", err.message);
     }
 }
 run();
