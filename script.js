@@ -2,26 +2,27 @@ const fs = require('fs');
 
 async function run() {
     const apiKey = process.env.GEMINI_API_KEY;
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    // En stabil endpoint: v1
+    const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
     const prompt = {
         contents: [{
             parts: [{
-                text: `GÖREV: https://www.mevzuat.gov.tr/MevzuatMetin/1.3.6183.pdf adresindeki dokümanın en son sayfalarında yer alan 'LİSTE' veya 'DİPNOTLAR' kısmını tara.
-                
-                KRİTİK UYARI: Daha önce 8109 sayılı bir kararla %4,5 oranı uyduruldu. Bu veri yanlıştır. 
-                
-                GERÇEK ARAMA ADIMLARI:
-                1. 51. maddeye ilişkin yapılan son değişikliği bul (Kasım 2025 tarihli kararı ara).
-                2. Oranın %3,7'ye revize edildiğini bu dipnotlardan teyit et.
-                3. Neden %4,5'ten %3,7'ye inildiğini, 2026 başındaki dezenflasyon hedefleriyle bağ kurarak 'kopya çekmeden' analiz et.
+                text: `GÖREV: https://www.mevzuat.gov.tr/MevzuatMetin/1.3.6183.pdf adresindeki resmi PDF dokümanını analiz et.
 
-                SADECE JSON YANIT VER:
+                ÖNEMLİ: Daha önceki analizinde 8109 sayılı kararla %4,5 oranı verildi ancak bu veri HATALIDIR ve PDF'in güncel dipnotlarıyla uyuşmamaktadır. 
+
+                ANALİZ ADIMLARI:
+                1. 51. madde metnini değil, sayfanın en altında bulunan (*) işaretli DİPNOTLARI ve en sondaki değişiklik listesini oku.
+                2. Kasım 2025 tarihinde yayımlanan ve gecikme zammını %3,7'ye indiren en güncel Cumhurbaşkanı Kararını bul.
+                3. Bu %3,7'lik indirimin neden yapıldığını (2026 başındaki dezenflasyon süreci, piyasa faizleri vb.) KOPYA ÇEKMEDEN kendi ekonomi mantığınla yorumla.
+
+                Sadece JSON formatında yanıt ver:
                 {
                   "tespit_edilen_oran": "...",
-                  "gercek_dayanak_karar": "...",
-                  "ekonomik_analiz": "...",
-                  "dogrulama": "PDF son sayfa dipnotları taranmıştır."
+                  "resmi_dayanak_dipnotu": "...",
+                  "ozgun_ekonomik_yorum": "...",
+                  "dogrulama_notu": "PDF dipnotları taranarak uydurma veriler temizlenmiştir."
                 }`
             }]
         }]
@@ -36,21 +37,26 @@ async function run() {
 
         const data = await response.json();
 
-        // TypeError'u engelleyen kontrol
-        if (data.candidates && data.candidates[0].content && data.candidates[0].content.parts) {
+        if (data.error) {
+            console.error("API HATASI:", data.error.message);
+            return;
+        }
+
+        if (data.candidates && data.candidates[0].content) {
             const textResponse = data.candidates[0].content.parts[0].text;
             const jsonMatch = textResponse.match(/\{[\s\S]*\}/);
 
             if (jsonMatch) {
                 fs.writeFileSync('report.json', jsonMatch[0]);
-                console.log("Rapor güncellendi.");
+                console.log("Rapor güncellendi. Gemini %3,7 gerçeğiyle yüzleşiyor.");
                 console.log(jsonMatch[0]);
             }
         } else {
-            console.error("API Yanıtı Beklenen Formatın Dışında:", JSON.stringify(data));
+            console.log("API boş döndü. Yanıt yapısı:", JSON.stringify(data));
         }
     } catch (err) {
-        console.error("Sistem Hatası:", err.message);
+        console.error("SİSTEM HATASI:", err.message);
     }
 }
+
 run();
