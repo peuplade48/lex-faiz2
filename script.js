@@ -5,30 +5,25 @@ async function run() {
     const baseUrl = "https://generativelanguage.googleapis.com/v1beta";
 
     try {
-        // Model olarak Flash 1.5 en güncel ve hızlı olanıdır
+        // En hafif ve hızlı model
         const model = "models/gemini-1.5-flash"; 
 
         const prompt = {
             contents: [{
                 parts: [{
-                    text: `
-                    GÖREV: https://www.mevzuat.gov.tr/MevzuatMetin/1.3.6183.pdf adresindeki dokümanı bir dedektif gibi incele.
+                    text: `Şu URL'deki PDF'in EN SON sayfasındaki 'DİPNOTLAR' (madde 51 ile ilgili olanlar) kısmını analiz et: 
+                    https://www.mevzuat.gov.tr/MevzuatMetin/1.3.6183.pdf
                     
-                    ÖNEMLİ: Dokümanın ilk sayfasındaki 51. madde metni ESKİDİR (%2,5 veya %3,5 yazabilir). 
-                    Gerçek ve güncel oran, PDF'in EN SONUNDA yer alan "DİPNOTLAR" veya "İŞLENEMEYEN HÜKÜMLER" kısmındaki yıldızlı (*) tablolardadır.
+                    Görevin:
+                    1. 51. maddenin yanındaki (*) işaretinin dipnotlardaki karşılığını bul.
+                    2. En son yayımlanan Cumhurbaşkanı Kararı (2025 tarihli olanlar dahil) ile belirlenen oranı tespit et.
+                    3. Bu oranın, piyasadaki kredi faizlerine göre neden bu seviyede olduğunu KOPYA ÇEKMEDEN özgün bir dille yorumla.
                     
-                    ADIMLAR:
-                    1. PDF'in en son sayfalarına git ve 51. madde ile ilgili yapılan en son tarihli Cumhurbaşkanı Kararı (CK) değişikliğini bul.
-                    2. 2024 ve 2025 yıllarında yayımlanan kararları karşılaştır (8484 sayılı ve 10556 sayılı kararlar gibi).
-                    3. Mevcut (Şubat 2026) en güncel oranı tespit et.
-                    4. Bu tespitine dayanarak; neden oranların değiştiğini, piyasa faizleri ve vergi adaleti açısından KOPYA ÇEKMEDEN özgün bir dille yorumla.
-
-                    Yanıtı SADECE şu JSON formatında ver:
+                    Yanıt sadece JSON olsun:
                     {
-                      "tespit_edilen_guncel_oran": "...",
-                      "dayanak_dipnot_verisi": "...",
-                      "ozgun_ekonomik_analiz": "...",
-                      "rapor_durumu": "Mevzuat dipnotları taranarak güncellendi",
+                      "oran": "...",
+                      "dayanak": "...",
+                      "ozgun_yorum": "...",
                       "tarih": "2026-02-09"
                     }`
                 }]
@@ -43,23 +38,20 @@ async function run() {
 
         const data = await response.json();
         
-        if (!data.candidates || !data.candidates[0].content) {
-            console.error("API'den geçerli bir yanıt alınamadı. Kota veya erişim sorunu olabilir.");
-            process.exit(1);
-        }
+        // Yanıt kontrolü ve hata ayıklama
+        if (data.candidates && data.candidates[0].content) {
+            const textResponse = data.candidates[0].content.parts[0].text;
+            const jsonMatch = textResponse.match(/\{[\s\S]*\}/);
 
-        const textResponse = data.candidates[0].content.parts[0].text;
-        const jsonMatch = textResponse.match(/\{[\s\S]*\}/);
-
-        if (jsonMatch) {
-            // Dosyayı her seferinde üzerine yazarak güncelle
-            fs.writeFileSync('report.json', jsonMatch[0]);
-            console.log("GÜNCELLEME BAŞARILI: report.json yeni verilerle yenilendi.");
-            console.log("Yeni Rapor:", jsonMatch[0]);
+            if (jsonMatch) {
+                fs.writeFileSync('report.json', jsonMatch[0]);
+                console.log("GÜNCELLEME TAMAMLANDI: report.json içeriği yenilendi.");
+            }
+        } else {
+            console.log("Kota dolmuş olabilir. Lütfen 60 saniye bekleyip tekrar deneyin.");
         }
     } catch (err) {
-        console.error("HATA:", err.message);
+        console.error("SİSTEM HATASI:", err.message);
     }
 }
-
 run();
