@@ -2,23 +2,23 @@ const fs = require('fs');
 
 async function run() {
     const apiKey = process.env.GEMINI_API_KEY;
+    // v1beta'da en geniş kabul gören model tanımlama formatı
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
     const prompt = {
         contents: [{
             parts: [{
-                text: `Sistem Tarihi: 10 Şubat 2026. 
-                GÖREV: Google Arama aracını kullanarak 6183 sayılı Kanun 51. maddedeki gecikme zammı oranını bul.
-                HEDEF: Kasım 2025'te yürürlüğe giren en son Cumhurbaşkanı Kararını ve yeni oranı tespit et.
-                ANALİZ: Bu oranı 2026 başı enflasyon hedefleriyle KOPYA ÇEKMEDEN kıyasla.
+                text: `Sistem Tarihi: 10 Şubat 2026.
+                GÖREV: Google Arama (google_search) aracını kullanarak 6183 sayılı Kanun'un 51. maddesindeki gecikme zammı oranını araştır.
+                ÖZELLİKLE: Kasım 2025 tarihinde yayımlanan Resmi Gazete verilerini ve yeni oranı (yüzde kaç olduğunu) tespit et.
+                ANALİZ: Bulduğun bu oranı, 2026 yılı başındaki Türkiye ekonomisinin faiz politikalarıyla KOPYA ÇEKMEDEN kıyasla.
                 
-                DİKKAT: Eski verileri (%4,5 gibi) kullanma. Sadece canlı internet verisini raporla.`
+                DİKKAT: Hafızandaki eski %4,5 veya %1,6 gibi verileri kullanma. Bulamazsan 'Veriye ulaşılamadı' yaz.`
             }]
         }],
-        tools: [{ google_search: {} }],
+        tools: [{ google_search: {} }], // Canlı internet erişimi
         generationConfig: { 
-            temperature: 0,
-            response_mime_type: "application/json"
+            temperature: 0
         }
     };
 
@@ -31,18 +31,21 @@ async function run() {
 
         const data = await response.json();
         
+        if (data.error) {
+            console.error("API HATASI:", data.error.message);
+            return;
+        }
+
         if (data.candidates && data.candidates[0].content) {
-            const rawOutput = data.candidates[0].content.parts[0].text;
+            const output = data.candidates[0].content.parts[0].text;
             console.log("------------------------------------------");
-            console.log("GEMINI ANALİZ SONUCU:");
-            console.log(rawOutput);
+            console.log("ARAŞTIRMA SONUCU:");
+            console.log(output);
             console.log("------------------------------------------");
-            fs.writeFileSync('report.json', rawOutput);
-        } else {
-            console.log("Model yanıt veremedi:", JSON.stringify(data));
+            fs.writeFileSync('report.json', output);
         }
     } catch (err) {
-        console.error("Hata oluştu:", err.message);
+        console.error("SİSTEM HATASI:", err.message);
     }
 }
 run();
