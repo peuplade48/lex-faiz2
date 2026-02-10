@@ -10,7 +10,7 @@ on:
 
   # 3. Her gece otomatik kontrol için (Opsiyonel)
   schedule:
-    - cron: '0 0 * * *'
+    - cron: '0 5 * * *'
 
 jobs:
   update-rate:
