@@ -1,7 +1,9 @@
 {
-  "official_confirmation": "Aylık %3,7",
-  "legal_basis": "10556 Sayılı Cumhurbaşkanı Kararı",
-  "gazette_date": "13 Kasım 2025",
-  "status": "active",
-  "annual_rate_percent": 44.4
+  "last_run": "2026-02-10T07:02:32.743Z",
+  "report": {
+    "official_confirmation": "%3,7",
+    "legal_basis": "10556",
+    "gazette_date": "13.11.2025",
+    "current_decree_rate": "%3,7"
+  }
 }
