@@ -1,53 +1,58 @@
 const fs = require('fs');
+const pdf = require('pdf-parse');
 
 async function run() {
     const apiKey = process.env.GEMINI_API_KEY;
-    const baseUrl = "https://generativelanguage.googleapis.com/v1beta";
+    const pdfUrl = "https://www.mevzuat.gov.tr/MevzuatMetin/1.3.6183.pdf";
 
     try {
-        // 1. ADIM: Aktif modeli dinamik olarak bul (404 hatasını engellemek için)
-        const listRes = await fetch(`${baseUrl}/models?key=${apiKey}`);
-        const listData = await listRes.json();
-        const activeModel = listData.models.find(m => m.supportedGenerationMethods.includes('generateContent')).name;
+        // 1. ADIM: PDF'i gerçekten indir ve metne dök
+        const responsePdf = await fetch(pdfUrl);
+        const buffer = await responsePdf.arrayBuffer();
+        const pdfData = await pdf(Buffer.from(buffer));
+        
+        // Sadece son 2000 karakteri (dipnotların olduğu yer) alalım ki Gemini kaybolmasın
+        const lastPart = pdfData.text.slice(-3000); 
 
-        // 2. ADIM: Tamamen bağımsız analiz
+        // 2. ADIM: Gemini'a bu ham metni ver ve "Buradaki gerçek oranı bul" de
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+
         const prompt = {
             contents: [{
                 parts: [{
-                    text: `Analiz Kaynağı: https://www.mevzuat.gov.tr/MevzuatMetin/1.3.6183.pdf
+                    text: `Aşağıdaki metin 6183 sayılı Kanun PDF'inin sonundaki dipnotlar kısmıdır:
+                    
+                    ---
+                    ${lastPart}
+                    ---
                     
                     GÖREV:
-                    1. Dokümanın 51. maddesini bul, ancak ana metindeki eski oranlara (metin içindekilere) itibar etme.
-                    2. PDF'in EN SONUNDA yer alan "DİPNOTLAR" veya "İŞLENEMEYEN HÜKÜMLER" kısmındaki (*) işaretli kronolojik tabloyu tara.
-                    3. 2024 ve 2025 yıllarındaki Cumhurbaşkanı Kararları (CK) arasındaki en son değişikliği tespit et.
-                    4. Bulduğun bu EN GÜNCEL oranı ve resmi dayanağını raporla.
-                    5. Neden önceki oranlardan farklı bir seviyeye gelindiğini, 2026 başındaki ekonomik hedeflere göre KOPYA ÇEKMEDEN tamamen kendi mantığınla yorumla.
+                    1. Bu metindeki 51. maddeye ilişkin EN SON tarihli değişikliği bul.
+                    2. Oranın kaç olduğunu (Kasım 2025 verisi orada olmalı) tespit et.
+                    3. Tespit ettiğin rakam üzerinden, neden bu seviyenin seçildiğini KOPYA ÇEKMEDEN özgün bir dille yorumla.
+                    4. Sakın uydurma kararname numarası (8214 vb.) verme. Sadece metindeki gerçek numarayı yaz.
 
-                    Yanıtı sadece JSON olarak ver:
+                    Yanıt JSON olsun:
                     {
-                      "tespit_edilen_oran": "...",
-                      "dayanak_verisi": "...",
-                      "analiz_yontemi": "Sadece dipnot taraması yapıldı",
-                      "ozgun_ekonomik_analiz": "..."
+                      "gercek_oran": "...",
+                      "dayanak_no": "...",
+                      "analiz": "..."
                     }`
                 }]
             }]
         };
 
-        const response = await fetch(`${baseUrl}/${activeModel}:generateContent?key=${apiKey}`, {
+        const res = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(prompt)
         });
 
-        const data = await response.json();
-        const textResponse = data.candidates[0].content.parts[0].text;
-        const jsonMatch = textResponse.match(/\{[\s\S]*\}/);
+        const data = await res.json();
+        const resultText = data.candidates[0].content.parts[0].text;
+        fs.writeFileSync('report.json', resultText.match(/\{[\s\S]*\}/)[0]);
+        console.log("Gerçek veri çekildi ve analiz edildi.");
 
-        if (jsonMatch) {
-            fs.writeFileSync('report.json', jsonMatch[0]);
-            console.log("Bağımsız analiz tamamlandı. report.json güncellendi.");
-        }
     } catch (err) {
         console.error("Hata:", err.message);
     }
