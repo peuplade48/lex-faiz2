@@ -18,8 +18,7 @@ async function run() {
         const prompt = {
             contents: [{
                 parts: [{
-                    text: `GÖREV: 6183 Sayılı Kanun 51. maddedeki gecikme zammı oranını Google Search ile bul.
-                    Kasım 2025'teki güncel Cumhurbaşkanı kararını (%3,7 oranını) teyit et.
+                    text: `GÖREV: 6183 Sayılı Kanun 51. maddedeki gecikme zammı oranını Google Search ile bul.                   
                     Sadece şu JSON formatında yanıt ver:
                     {
                       "last_run": "${new Date().toISOString()}",
