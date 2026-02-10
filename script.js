@@ -2,29 +2,30 @@ const fs = require('fs');
 
 async function run() {
     const apiKey = process.env.GEMINI_API_KEY;
-    // v1beta sürümü 'tools' (Google Search) özelliğini destekler
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    // En güncel model ve endpoint kombinasyonu
+    const model = "gemini-1.5-flash"; 
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
     const prompt = {
         contents: [{
             parts: [{
-                text: `Bugün 10 Şubat 2026. 
-                Görevin: 6183 sayılı Kanun'un 51. maddesindeki gecikme zammı oranını internetten (Resmi Gazete ve GİB) araştırarak bul.
+                text: `GÖREV: Bugün 10 Şubat 2026. 
+                6183 sayılı Kanun'un 51. maddesindeki gecikme zammı oranını İNTERNETTEN (Resmi Gazete ve GİB verileri) araştırarak bul.
                 
-                TALİMATLAR:
-                1. Sakın kafandan kararname (8214 sayılı vb.) veya oran (%60 vb.) uydurma.
-                2. Kasım 2025 tarihinde yayımlanan ve oranı %3,7'ye indiren en güncel Cumhurbaşkanı Kararını bul.
-                3. Bu %3,7'lik oranı teyit ettikten sonra, devletin neden bu indirimi yaptığını (enflasyon beklentileri, piyasa faizleri) KOPYA ÇEKMEDEN özgün bir dille analiz et.
+                DİKKAT: 
+                - Sakın 2024 yılına ait uydurma kararname numaraları (8214 vb.) veya yıllık %60 gibi hatalı oranlar verme.
+                - Kasım 2025'te oranı %3,7'ye indiren en güncel Cumhurbaşkanı Kararı'nı tespit et.
+                - Bu %3,7'lik oranı bulduktan sonra; devletin neden artış yerine indirimi tercih ettiğini (dezenflasyon süreci, piyasa faizleri) KOPYA ÇEKMEDEN özgün bir dille analiz et.
                 
-                Yanıtı şu JSON formatında ver:
+                SADECE JSON YANIT VER:
                 {
-                  "dogrulanmış_oran": "...",
-                  "resmi_karar_no": "...",
-                  "ekonomik_yorum": "..."
+                  "dogrulanmis_oran": "...",
+                  "resmi_karar_verisi": "...",
+                  "ozgun_ekonomik_analiz": "...",
+                  "kaynak": "Google Search / Resmi Gazete"
                 }`
             }]
         }],
-        // Bu kısım Gemini'ın internete çıkmasını sağlar
         tools: [{ google_search_retrieval: {} }]
     };
 
@@ -36,21 +37,26 @@ async function run() {
         });
 
         const data = await response.json();
-        
+
+        if (data.error) {
+            console.error("API HATASI:", data.error.message);
+            return;
+        }
+
         if (data.candidates && data.candidates[0].content) {
             const textResponse = data.candidates[0].content.parts[0].text;
             const jsonMatch = textResponse.match(/\{[\s\S]*\}/);
 
             if (jsonMatch) {
                 fs.writeFileSync('report.json', jsonMatch[0]);
-                console.log("Rapor internetten doğrulanan gerçek verilerle oluşturuldu.");
+                console.log("İŞLEM BAŞARILI: Rapor gerçek verilerle güncellendi.");
                 console.log(jsonMatch[0]);
             }
         } else {
-            console.error("API yanıt vermedi veya arama yapamadı:", JSON.stringify(data));
+            console.log("Boş yanıt alındı. Veri yapısı:", JSON.stringify(data));
         }
     } catch (err) {
-        console.error("Sistem Hatası:", err.message);
+        console.error("SİSTEM HATASI:", err.message);
     }
 }
 
