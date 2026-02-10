@@ -1,15 +1,25 @@
-name: Gecikme Zammı Raporlayıcı
+name: Gecikme Zammı Güncelleyici
 
 on:
+  # 1. PHP/JS Arayüzünden gelen sinyal için
+  repository_dispatch:
+    types: [disaridan-tetikleme]
+
+  # 2. GitHub panelinden manuel çalıştırmak için
+  workflow_dispatch:
+
+  # 3. Her gece otomatik kontrol için (Opsiyonel)
   schedule:
-    - cron: '0 9 * * *' # Her sabah 09:00'da otomatik çalışır
-  workflow_dispatch: # İstediğiniz an manuel çalıştırmak için
+    - cron: '0 0 * * *'
 
 jobs:
-  build:
+  update-rate:
     runs-on: ubuntu-latest
+    
+    # Yazma yetkisi vermezsek "Nothing to commit" hataları devam eder
     permissions:
-      contents: write # Dosya yazabilmesi için gerekli izin
+      contents: write
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -19,7 +29,12 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Get Gemini Analysis
+      - name: Install Dependencies
+        run: |
+          # Eğer node_modules yoksa fetch zaten Node 18+ ile yerleşik gelir
+          # Ekstra paket kullanıyorsan buraya ekleyebilirsin
+
+      - name: Run Gemini Research Script
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: node script.js
@@ -28,6 +43,14 @@ jobs:
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          git add report.json
-          git commit -m "Güncel 6183/51 Raporu: $(date +'%d-%m-%Y')" || echo "Değişiklik yok."
-          git push
+          
+          # Dosyanın oluşup oluşmadığını kontrol et
+          if [ -f report.json ]; then
+            git add report.json
+            # Sadece değişiklik varsa commit yap, yoksa hata verme
+            git commit -m "🤖 AI: Gecikme zammı oranı güncellendi (Sistem Tarihi: 2026)" || echo "Değişiklik yok."
+            git push
+          else
+            echo "Hata: report.json dosyası oluşturulamadı!"
+            exit 1
+          fi
