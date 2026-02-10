@@ -2,31 +2,30 @@ const fs = require('fs');
 
 async function run() {
     const apiKey = process.env.GEMINI_API_KEY;
-    // 404 hatasını aşmak için en güncel model isimlendirmesi (models/ ön eki ile)
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    // URL'deki model ismini en yalın ve stabil haliyle güncelledik
+    const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
     const prompt = {
         contents: [{
             parts: [{
                 text: `KAYNAK: https://mevzuat.gov.tr/mevzuat?MevzuatNo=6183&MevzuatTur=1&MevzuatTertip=3
 
-                TALİMAT:
-                1. Yukarıdaki bağlantıda yer alan 6183 sayılı Kanun'un 51. maddesini ve sayfanın sonundaki "Değişiklikler Cetveli"ni/fihristini incele.
-                2. Bu maddeye ilişkin yapılmış olan EN GÜNCEL değişikliği (oranı ve dayanağını) tespit et.
-                3. Bulduğun oranı ve bu kararın resmi numarasını/tarihini raporla.
-                4. Bu oranın neden bu seviyede olduğunu, 2026 yılı başındaki ekonomik koşullar çerçevesinde KOPYA ÇEKMEDEN kendi mantığınla analiz et.
-                5. Eğer veriyi bulamıyorsan uydurma, dürüstçe 'veriye ulaşamadım' yaz.
+                GÖREV:
+                1. Yukarıdaki bağlantıda yer alan 6183 sayılı Kanun'un 51. maddesini ve sayfanın en sonundaki değişiklik listesini analiz et.
+                2. Bu maddeye ilişkin yürürlükte olan en güncel oranı ve bu oranın resmi dayanağını (Karar no ve tarih) tespit et.
+                3. Tespit ettiğin veriyi, 2026 yılı başındaki Türkiye ekonomisinin faiz politikalarıyla kıyaslayarak (kopya çekmeden, tamamen kendi zekanla) yorumla.
+                4. Eğer veriye ulaşamıyorsan uydurma, 'Veriye ulaşılamadı' yaz.
 
-                YANITI SADECE JSON OLARAK VER:
+                YANIT FORMATI (JSON):
                 {
                   "tespit_edilen_oran": "...",
-                  "resmi_dayanak": "...",
-                  "bagimsiz_analiz": "..."
+                  "hukuki_dayanak": "...",
+                  "ozgun_ekonomik_analiz": "..."
                 }`
             }]
         }],
         generationConfig: {
-            temperature: 0 // "Tahmin" motorunu kapatıp sadece "okuma" motorunu açar.
+            temperature: 0 // Tahmin yürütmeyi (uydurmayı) kapatır.
         }
     };
 
@@ -40,22 +39,8 @@ async function run() {
         const data = await response.json();
 
         if (data.error) {
-            console.error("API Hatası:", data.error.message);
+            console.error("API HATASI:", data.error.message);
             return;
         }
 
-        if (data.candidates && data.candidates[0].content) {
-            const textResponse = data.candidates[0].content.parts[0].text;
-            const jsonMatch = textResponse.match(/\{[\s\S]*\}/);
-
-            if (jsonMatch) {
-                fs.writeFileSync('report.json', jsonMatch[0]);
-                console.log("Bağımsız analiz tamamlandı.");
-                console.log(jsonMatch[0]);
-            }
-        }
-    } catch (err) {
-        console.error("Sistem Hatası:", err.message);
-    }
-}
-run();
+        if (data.candidates && data
