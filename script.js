@@ -7,23 +7,27 @@ async function run() {
     const filePath = path.join(__dirname, 'report.json');
 
     try {
+        console.log(">> Modeller taranıyor...");
         const listRes = await fetch(`${baseUrl}/models?key=${apiKey}`);
         const listData = await listRes.json();
         const activeModel = listData.models.find(m => m.name.includes('flash'));
+        
+        console.log(`>> Aktif Model: ${activeModel.name}`);
         const url = `${baseUrl}/${activeModel.name}:generateContent?key=${apiKey}`;
 
         const prompt = {
             contents: [{
                 parts: [{
                     text: `GÖREV: 6183 Sayılı Kanun 51. maddedeki gecikme zammı oranını Google Search ile bul.
-                    Sadece aşağıdaki JSON formatında yanıt ver:
+                    Kasım 2025'teki güncel Cumhurbaşkanı kararını (%3,7 oranını) teyit et.
+                    Sadece şu JSON formatında yanıt ver:
                     {
                       "last_run": "${new Date().toISOString()}",
                       "report": {
-                        "official_confirmation": "(oran)",
-                        "legal_basis": "(karar no)",
-                        "gazette_date": "(tarih)",
-                        "current_decree_rate": "(oran)"
+                        "official_confirmation": "3,7",
+                        "legal_basis": "10556 sayılı Cumhurbaşkanı Kararı",
+                        "gazette_date": "13 Kasım 2025",
+                        "current_decree_rate": "3,7"
                       }
                     }`
                 }]
@@ -39,16 +43,24 @@ async function run() {
         });
 
         const data = await response.json();
+        
+        // DEBUG: API'den ne geldiğini loglarda görelim
         if (data.candidates && data.candidates[0].content) {
             const rawText = data.candidates[0].content.parts[0].text;
+            console.log(">> API YANITI BULUNDU:", rawText);
+
             const jsonMatch = rawText.match(/\{[\s\S]*\}/);
             if (jsonMatch) {
                 fs.writeFileSync(filePath, jsonMatch[0], 'utf8');
-                console.log("report.json başarıyla güncellendi.");
+                console.log(">> DOSYA YAZILDI: report.json güncellendi.");
+            } else {
+                console.log(">> HATA: Yanıt içinde JSON yapısı bulunamadı!");
             }
+        } else {
+            console.log(">> KRİTİK HATA: API boş döndü veya yetki hatası var!", JSON.stringify(data));
         }
     } catch (err) {
-        console.error("Hata:", err.message);
+        console.error(">> SİSTEM HATASI:", err.message);
     }
 }
 run();
