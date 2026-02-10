@@ -1,23 +1,28 @@
 const fs = require('fs');
+const path = require('path');
 
 async function run() {
     const apiKey = process.env.GEMINI_API_KEY;
     const baseUrl = "https://generativelanguage.googleapis.com/v1beta";
+    const filePath = path.join(__dirname, 'report.json');
 
     try {
+        console.log("1. Modeller listeleniyor...");
         const listRes = await fetch(`${baseUrl}/models?key=${apiKey}`);
         const listData = await listRes.json();
+        
         const activeModel = listData.models.find(m => m.name.includes('flash'));
-        const url = `${baseUrl}/${activeModel.name}:generateContent?key=${apiKey}`;
+        if (!activeModel) throw new Error("Flash modeli bulunamadı!");
+        console.log(`2. Kullanılan model: ${activeModel.name}`);
 
+        const url = `${baseUrl}/${activeModel.name}:generateContent?key=${apiKey}`;
         const prompt = {
             contents: [{
                 parts: [{
                     text: `GÖREV: 6183 Sayılı Kanun 51. maddedeki gecikme zammı oranını Google Search ile bul.
                     
-                    KURALLAR:
-                    1. Yanıtı SADECE aşağıdaki JSON formatında ver.
-                    2. Veriye ulaşamazsan değerleri null yap.
+                    ÖNEMLİ: Sadece JSON formatında yanıt ver. 
+                    Kasım 2025'teki güncel Cumhurbaşkanı kararını (3,7 oranını) bulmaya odaklan.
                     
                     FORMAT:
                     {
@@ -35,6 +40,7 @@ async function run() {
             generationConfig: { temperature: 0, response_mime_type: "application/json" }
         };
 
+        console.log("3. API'ye istek gönderiliyor...");
         const response = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -44,21 +50,24 @@ async function run() {
         const data = await response.json();
         
         if (data.candidates && data.candidates[0].content) {
-            const rawOutput = data.candidates[0].content.parts[0].text;
+            let finalJson = data.candidates[0].content.parts[0].text;
             
-            // Temizlik ve Kayıt
-            const jsonMatch = rawOutput.match(/\{[\s\S]*\}/);
-            const finalData = jsonMatch ? jsonMatch[0] : rawOutput;
+            // Markdown temizliği (eğer varsa)
+            finalJson = finalJson.replace(/```json/g, "").replace(/```/g, "").trim();
 
-            // JS kodunun beklediği "last_run" ve "report" yapısının korunduğundan emin olalım
-            fs.writeFileSync('report.json', finalData, 'utf8');
-            console.log("------------------------------------------");
-            console.log("SENKRONİZE JSON OLUŞTURULDU:");
-            console.log(finalData);
-            console.log("------------------------------------------");
+            console.log("4. API'den gelen veri:", finalJson);
+            
+            // DOSYA YAZMA İŞLEMİ
+            fs.writeFileSync(filePath, finalJson, 'utf8');
+            
+            // Yazılan dosyayı kontrol et
+            const checkFile = fs.readFileSync(filePath, 'utf8');
+            console.log("5. Dosyaya yazılan içerik boyutu:", checkFile.length);
+        } else {
+            console.log("HATA: API'den boş yanıt döndü!", JSON.stringify(data));
         }
     } catch (err) {
-        console.error("Hata:", err.message);
+        console.error("KRİTİK HATA:", err.message);
     }
 }
 run();
