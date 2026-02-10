@@ -14,29 +14,23 @@ async function run() {
             contents: [{
                 parts: [{
                     text: `Sistem Tarihi: 10 Şubat 2026.
+                    GÖREV: 6183 Sayılı Kanun 51. maddedeki en güncel gecikme zammı oranını Google Search ile bul.
                     
-                    GÖREV: 
-                    Google Search aracını kullanarak 6183 Sayılı Kanun'un 51. maddesindeki gecikme zammı oranını araştır. 
-                    En güncel (2025 sonu/2026 başı) resmi veriyi tespit et.
-                    
-                    KURALLAR:
-                    1. Veriyi bulamazsan uydurma, 'null' yaz.
-                    2. Yanıtı sadece aşağıdaki JSON şablonuna göre ver. Şablon içindeki anahtarları (key) kullan ama değerleri (value) kendin bulup doldur.
+                    ÖNEMLİ: Sadece JSON formatında yanıt ver. Bulamazsan uydurma, 'null' yaz.
                     
                     ŞABLON:
                     {
-                      "official_confirmation": "(Buraya bulduğun oranı sadece rakam olarak yaz)",
-                      "legal_basis": "(Buraya resmi karar numarasını yaz)",
-                      "gazette_date": "(Buraya Resmi Gazete tarihini yaz)",
-                      "status": "(Yürürlük durumunu yaz)",
-                      "annual_rate_percent": (Bulduğun aylık oran üzerinden yıllık hesabı rakam olarak yaz)
+                      "official_confirmation": "(oran)",
+                      "legal_basis": "(karar no)",
+                      "gazette_date": "(tarih)",
+                      "status": "active",
+                      "annual_rate_percent": (yıllık hesap)
                     }`
                 }]
             }],
             tools: [{ google_search: {} }],
             generationConfig: { 
-                temperature: 0,
-                response_mime_type: "application/json"
+                temperature: 0
             }
         };
 
@@ -49,12 +43,19 @@ async function run() {
         const data = await response.json();
         
         if (data.candidates && data.candidates[0].content) {
-            const jsonOutput = data.candidates[0].content.parts[0].text;
-            console.log("------------------------------------------");
-            console.log("OTONOM JSON ÇIKTISI:");
-            console.log(jsonOutput);
-            console.log("------------------------------------------");
-            fs.writeFileSync('report.json', jsonOutput);
+            let rawText = data.candidates[0].content.parts[0].text;
+            
+            // Markdown bloklarını (```json ... ```) temizle
+            const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+            const finalJson = jsonMatch ? jsonMatch[0] : rawText;
+
+            console.log("Bulunan Veri:", finalJson);
+            
+            // Dosyayı diske yaz
+            fs.writeFileSync('report.json', finalJson, 'utf8');
+            console.log("report.json başarıyla kaydedildi.");
+        } else {
+            console.log("Modelden içerik gelmedi:", JSON.stringify(data));
         }
     } catch (err) {
         console.error("Hata:", err.message);
