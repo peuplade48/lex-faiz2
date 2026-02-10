@@ -5,35 +5,37 @@ async function run() {
     const baseUrl = "https://generativelanguage.googleapis.com/v1beta";
 
     try {
-        // 1. ADIM: Mevcut modelleri listele ve çalışanı bul
-        console.log("Sistem taranıyor, uygun model aranıyor...");
+        // 1. ADIM: Çalışan modeli tespit et
         const listRes = await fetch(`${baseUrl}/models?key=${apiKey}`);
         const listData = await listRes.json();
-
-        if (listData.error) throw new Error(listData.error.message);
-
-        // generateContent destekleyen ilk flash modelini seç
-        const activeModel = listData.models.find(m => 
-            m.name.includes('flash') && 
-            m.supportedGenerationMethods.includes('generateContent')
-        );
+        const activeModel = listData.models.find(m => m.name.includes('flash') && m.supportedGenerationMethods.includes('generateContent'));
 
         if (!activeModel) throw new Error("Uygun model bulunamadı!");
-        console.log(`Tespit edilen model: ${activeModel.name}`);
 
-        // 2. ADIM: Tespit edilen modelle sıfır kopya araştırması
+        // 2. ADIM: Dürüstlük Odaklı Prompt
         const url = `${baseUrl}/${activeModel.name}:generateContent?key=${apiKey}`;
         const prompt = {
             contents: [{
                 parts: [{
-                    text: `GÖREV:
-                    1. 6183 sayılı Kanun'un 51. maddesindeki gecikme zammı oranını araştır.
-                    2. En son yapılan değişikliği (oran ve dayanak karar) tespit et.
-                    3. Bulduğun veriyi 2026 yılı başı ekonomik konjonktürüyle KOPYA ÇEKMEDEN analiz et.
-                    4. Hafızandaki eski/sabit verileri değil, şu anki güncel veriyi kullan. Bulamazsan uydurma.`
+                    text: `SİSTEM TARİHİ: 10 Şubat 2026.
+                    GÖREV: 6183 sayılı Kanun 51. maddedeki gecikme zammı oranını Google Arama ile tespit et.
+
+                    KRİTİK TALİMATLAR (HAYATİ ÖNEMDE):
+                    1. ASLA UYDURMA: Eğer 2025 yılının son çeyreğine (Kasım 2025) ait en güncel Cumhurbaşkanı Kararı'nı ve yeni oranı (%3,7 veya o tarihteki gerçek her ne ise) bulamıyorsan, 'GÜNCEL VERİYE ULAŞAMADIM' yaz. 
+                    2. ESKİ VERİ YASAK: Hafızandaki %2,5, %3,5 veya %4,5 gibi eski tarihli oranları "güncelmiş gibi" sunma. Bunlar geçmişte kaldı.
+                    3. BELGE ŞARTI: Kararın numarasını (Örn: 10556 sayılı Karar gibi) ve Resmi Gazete tarihini bulamazsan bilgi verme.
+                    4. DÜRÜST OL: Tahmin yürütmek veya "olabilir" demek yerine, veriye ulaşamıyorsan bunu net bir şekilde belirt.
+
+                    YANIT FORMATI:
+                    - Tespit Edilen Oran: (Emin değilsen 'Tespit edilemedi' yaz)
+                    - Dayanak Karar: (Emin değilsen 'Tespit edilemedi' yaz)
+                    - Analiz: (Sadece veriden eminsen 2026 ekonomisiyle kıyasla)`
                 }]
             }],
-            generationConfig: { temperature: 0 }
+            tools: [{ google_search: {} }],
+            generationConfig: { 
+                temperature: 0 // Yaratıcılığı tamamen kapatır, sadece gerçeklere odaklanır.
+            }
         };
 
         const response = await fetch(url, {
@@ -47,7 +49,7 @@ async function run() {
         if (data.candidates && data.candidates[0].content) {
             const output = data.candidates[0].content.parts[0].text;
             console.log("------------------------------------------");
-            console.log("BAĞIMSIZ ANALİZ SONUCU:");
+            console.log("DÜRÜST ANALİZ SONUCU:");
             console.log(output);
             console.log("------------------------------------------");
             fs.writeFileSync('report.json', output);
