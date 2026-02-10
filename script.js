@@ -2,34 +2,32 @@ const fs = require('fs');
 
 async function run() {
     const apiKey = process.env.GEMINI_API_KEY;
-    // En stabil v1beta endpoint'i (HTML erişimi için)
+    // URL yapısında 'models/' ön ekini manuel ekleyerek v1beta üzerinden çağırıyoruz
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
     const prompt = {
         contents: [{
             parts: [{
-                text: `KAYNAK URL: https://mevzuat.gov.tr/mevzuat?MevzuatNo=6183&MevzuatTur=1&MevzuatTertip=3
+                text: `GÖREV: https://mevzuat.gov.tr/mevzuat?MevzuatNo=6183&MevzuatTur=1&MevzuatTertip=3 adresindeki resmi metni analiz et.
 
-                GÖREV:
-                1. Yukarıdaki HTML sayfasının içeriğini tara. Özellikle 51. madde metnini ve bu maddenin altındaki 'ek listeler' veya 'değişiklik fihristi' tablolarını incele.
-                2. 2025 yılı sonu itibarıyla (özellikle Kasım 2025) gecikme zammı oranında yapılan değişikliği tespit et.
-                3. Tespit ettiğin oranı, Resmi Gazete tarihini ve Cumhurbaşkanı Karar numarasını bul.
-                4. Analizini yaparken sakın geçmişteki uydurma verileri (%4,5, %60 vb.) kullanma. Sadece şu anki HTML sayfasında ne yazıyorsa onu raporla.
-                
-                EKONOMİK ANALİZ (KOPYA ÇEKMEDEN):
-                Bulduğun bu oran neden 2026 başında bu seviyededir? Enflasyon ve piyasa faizleriyle bağ kurarak tamamen kendi yorumunu yap.
+                TALİMATLAR:
+                1. Sayfa içeriğindeki 51. maddeyi ve bu maddenin güncelliğini belirleyen 'Değişikliklerin İşlendiği Liste' kısmını oku.
+                2. Kasım 2025 tarihinde yürürlüğe giren en güncel gecikme zammı oranını tespit et.
+                3. Bu oranın resmi dayanağını (Cumhurbaşkanı Karar sayısı ve tarihi) sayfadan bul ve raporla.
+                4. Sakın geçmişteki uydurma verileri (%4,5 veya %60 gibi) kullanma. Sayfada ne görüyorsan onu yaz.
+                5. Bulduğun oranı 2026 yılı başındaki ekonomik hedefler (enflasyonla mücadele, likidite) çerçevesinde KOPYA ÇEKMEDEN özgün bir dille yorumla.
 
-                YANIT FORMATI (SADECE JSON):
+                YALNIZCA JSON FORMATINDA YANIT VER:
                 {
-                  "kaynaktan_gelen_oran": "...",
-                  "dayanak_hukuki_metin": "...",
-                  "analiz_yontemi": "HTML DOM/Metin Analizi",
+                  "tespit_edilen_oran": "...",
+                  "hukuki_dayanak": "...",
+                  "analiz_metodu": "mevzuat.gov.tr HTML Analizi",
                   "bagimsiz_ekonomik_yorum": "..."
                 }`
             }]
         }],
         generationConfig: {
-            temperature: 0 // Tahmin yürütmeyi engeller, sadece veriye odaklanır.
+            temperature: 0.1
         }
     };
 
@@ -42,20 +40,27 @@ async function run() {
 
         const data = await response.json();
 
+        if (data.error) {
+            console.error("API HATASI:", data.error.message);
+            // Eğer hala 404 verirse v1 denenebilir
+            return;
+        }
+
         if (data.candidates && data.candidates[0].content) {
             const textResponse = data.candidates[0].content.parts[0].text;
             const jsonMatch = textResponse.match(/\{[\s\S]*\}/);
 
             if (jsonMatch) {
                 fs.writeFileSync('report.json', jsonMatch[0]);
-                console.log("HTML Analizi Tamamlandı. Rapor oluşturuldu.");
-                console.log("Bulunan Veri:", JSON.parse(jsonMatch[0]).kaynaktan_gelen_oran);
+                console.log("Analiz başarılı. report.json oluşturuldu.");
+                console.log(jsonMatch[0]);
             }
         } else {
-            console.error("Model veriye ulaşamadı veya hata verdi:", JSON.stringify(data));
+            console.log("Yanıt alınamadı:", JSON.stringify(data));
         }
     } catch (err) {
-        console.error("Sistem Hatası:", err.message);
+        console.error("SİSTEM HATASI:", err.message);
     }
 }
+
 run();
