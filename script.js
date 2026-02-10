@@ -2,31 +2,32 @@ const fs = require('fs');
 
 async function run() {
     const apiKey = process.env.GEMINI_API_KEY;
-    // En geniş uyumluluk için models/ ön eki olmadan v1beta endpoint'i
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    // En stabil endpoint ve model isimlendirmesi
+    const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
     const prompt = {
         contents: [{
             parts: [{
-                text: `Analiz Kaynağı: https://www.mevzuat.gov.tr/MevzuatMetin/1.3.6183.pdf
+                text: `GÖREV: https://www.mevzuat.gov.tr/MevzuatMetin/1.3.6183.pdf adresindeki PDF belgesini analiz et.
+                
+                TALİMATLAR:
+                1. 51. maddeye ilişkin olarak PDF'in en altındaki DİPNOTLAR kısmını ve kronolojik tabloyu tara.
+                2. Bu tabloda yer alan en güncel (en son tarihli) gecikme zammı oranını tespit et.
+                3. Tespit ettiğin rakamın resmi dayanağını (Cumhurbaşkanı Karar numarası ve tarihi) belirt.
+                4. Bu oran üzerinden, 2026 yılı başındaki ekonomik konjonktürü ve neden bu seviyenin tercih edildiğini tamamen kendi mantığınla analiz et.
+                
+                ÖNEMLİ: Daha önce uydurduğun yıllık %60 veya 8214 sayılı karar gibi verilere itibar etme. Sadece PDF'te yazanı oku. Bulamıyorsan uydurma, 'veriye ulaşamadım' yaz.
 
-                TALİMAT (KESİN):
-                1. Bu PDF'in 51. maddesini bul. Metnin içine değil, en alttaki dipnotlar ve değişiklik listesine bak.
-                2. Orada 2024 ve 2025 yıllarında yapılmış olan Cumhurbaşkanı Kararları (CK) kronolojisini incele.
-                3. Tespit ettiğin EN SON yürürlüğe giren oranı ve bu kararın resmi numarasını bul.
-                4. Bulduğun bu rakamı temel alarak; 2026 yılı başındaki Türkiye ekonomisinin faiz ve enflasyon dengesini, bu rakamın neden bu seviyede olduğunu KOPYA ÇEKMEDEN tamamen özgün bir dille yorumla.
-                5. Eğer PDF'i okuyamıyorsan veya veriye ulaşamıyorsan uydurma veri üretme, 'veriye ulaşamadım' yaz.
-
-                Yanıt formatı sadece JSON:
+                Yanıtı sadece JSON formatında ver:
                 {
                   "tespit_edilen_oran": "...",
-                  "dayanak_verisi": "...",
-                  "ozgun_ekonomik_analiz": "..."
+                  "resmi_dayanak": "...",
+                  "ozgun_analiz": "..."
                 }`
             }]
         }],
         generationConfig: {
-            temperature: 0 // Yaratıcılığı ve uydurmayı kapat, sadece gördüğünü yaz.
+            temperature: 0 // Tahmin yürütmeyi kapatır, sadece okumaya zorlar.
         }
     };
 
@@ -39,19 +40,26 @@ async function run() {
 
         const data = await response.json();
 
+        if (data.error) {
+            console.error("API HATASI:", data.error.message);
+            return;
+        }
+
         if (data.candidates && data.candidates[0].content) {
             const textResponse = data.candidates[0].content.parts[0].text;
             const jsonMatch = textResponse.match(/\{[\s\S]*\}/);
 
             if (jsonMatch) {
                 fs.writeFileSync('report.json', jsonMatch[0]);
-                console.log("Bağımsız rapor oluşturuldu. Bakalım ne buldu...");
+                console.log("Rapor oluşturuldu. Bakalım kendi başına ne buldu?");
+                console.log(jsonMatch[0]);
             }
         } else {
-            console.error("Model yanıt üretemedi:", JSON.stringify(data));
+            console.log("Model yanıt vermedi.");
         }
     } catch (err) {
-        console.error("Sistem Hatası:", err.message);
+        console.error("SİSTEM HATASI:", err.message);
     }
 }
+
 run();
