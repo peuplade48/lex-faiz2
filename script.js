@@ -2,57 +2,60 @@ const fs = require('fs');
 
 async function run() {
     const apiKey = process.env.GEMINI_API_KEY;
-    const baseUrl = "https://generativelanguage.googleapis.com/v1beta";
+    // En stabil v1beta endpoint'i (HTML erişimi için)
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+
+    const prompt = {
+        contents: [{
+            parts: [{
+                text: `KAYNAK URL: https://mevzuat.gov.tr/mevzuat?MevzuatNo=6183&MevzuatTur=1&MevzuatTertip=3
+
+                GÖREV:
+                1. Yukarıdaki HTML sayfasının içeriğini tara. Özellikle 51. madde metnini ve bu maddenin altındaki 'ek listeler' veya 'değişiklik fihristi' tablolarını incele.
+                2. 2025 yılı sonu itibarıyla (özellikle Kasım 2025) gecikme zammı oranında yapılan değişikliği tespit et.
+                3. Tespit ettiğin oranı, Resmi Gazete tarihini ve Cumhurbaşkanı Karar numarasını bul.
+                4. Analizini yaparken sakın geçmişteki uydurma verileri (%4,5, %60 vb.) kullanma. Sadece şu anki HTML sayfasında ne yazıyorsa onu raporla.
+                
+                EKONOMİK ANALİZ (KOPYA ÇEKMEDEN):
+                Bulduğun bu oran neden 2026 başında bu seviyededir? Enflasyon ve piyasa faizleriyle bağ kurarak tamamen kendi yorumunu yap.
+
+                YANIT FORMATI (SADECE JSON):
+                {
+                  "kaynaktan_gelen_oran": "...",
+                  "dayanak_hukuki_metin": "...",
+                  "analiz_yontemi": "HTML DOM/Metin Analizi",
+                  "bagimsiz_ekonomik_yorum": "..."
+                }`
+            }]
+        }],
+        generationConfig: {
+            temperature: 0 // Tahmin yürütmeyi engeller, sadece veriye odaklanır.
+        }
+    };
 
     try {
-        // 1. ADIM: Aktif ve erişilebilir modeli kendin bul (404 hatasını bitirir)
-        const listRes = await fetch(`${baseUrl}/models?key=${apiKey}`);
-        const listData = await listRes.json();
-        
-        // generateContent destekleyen ilk geçerli modeli seç (Genelde gemini-1.5-flash-latest veya benzeridir)
-        const activeModel = listData.models.find(m => m.supportedGenerationMethods.includes('generateContent')).name;
-        console.log(`Kullanılan Model: ${activeModel}`);
-
-        // 2. ADIM: Sıfır ipucu ile PDF analizi
-        const prompt = {
-            contents: [{
-                parts: [{
-                    text: `Analiz Kaynağı: https://www.mevzuat.gov.tr/MevzuatMetin/1.3.6183.pdf
-                    
-                    GÖREV:
-                    1. Bu dokümanın 51. maddesini bul. Metnin içine değil, en alttaki DİPNOTLAR kısmındaki kronolojik tabloya odaklan.
-                    2. 2024 ve 2025 yıllarında yapılmış olan son değişikliği tespit et.
-                    3. Tespit ettiğin EN GÜNCEL oranı ve resmi dayanağını (CK No ve Tarih) raporla.
-                    4. Bu oranın 2026 başındaki ekonomik dengelerdeki yerini KOPYA ÇEKMEDEN tamamen kendi mantığınla yorumla.
-                    5. Eğer PDF'i okuyamıyorsan veya veriye ulaşamıyorsan uydurma veri üretme, 'veriye ulaşamadım' yaz.
-
-                    Yanıtı sadece JSON olarak ver:
-                    {
-                      "tespit_edilen_oran": "...",
-                      "dayanak_verisi": "...",
-                      "ozgun_ekonomik_analiz": "..."
-                    }`
-                }]
-            }]
-        };
-
-        const response = await fetch(`${baseUrl}/${activeModel}:generateContent?key=${apiKey}`, {
+        const response = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(prompt)
         });
 
         const data = await response.json();
+
         if (data.candidates && data.candidates[0].content) {
             const textResponse = data.candidates[0].content.parts[0].text;
             const jsonMatch = textResponse.match(/\{[\s\S]*\}/);
+
             if (jsonMatch) {
                 fs.writeFileSync('report.json', jsonMatch[0]);
-                console.log("Bağımsız rapor oluşturuldu.");
+                console.log("HTML Analizi Tamamlandı. Rapor oluşturuldu.");
+                console.log("Bulunan Veri:", JSON.parse(jsonMatch[0]).kaynaktan_gelen_oran);
             }
+        } else {
+            console.error("Model veriye ulaşamadı veya hata verdi:", JSON.stringify(data));
         }
     } catch (err) {
-        console.error("Hata:", err.message);
+        console.error("Sistem Hatası:", err.message);
     }
 }
 run();
