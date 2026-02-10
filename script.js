@@ -2,8 +2,9 @@ const fs = require('fs');
 
 async function run() {
     const apiKey = process.env.GEMINI_API_KEY;
-    // v1beta sürümünde tam model ismini kullanarak 404 hatasını bypass ediyoruz
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    // 'latest' takısı Free tier üzerindeki 404 hatalarını çözmek için en garantili yoldur
+    const modelName = "gemini-1.5-flash-latest";
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
 
     const prompt = {
         contents: [{
@@ -11,11 +12,11 @@ async function run() {
                 text: `KAYNAK: https://mevzuat.gov.tr/mevzuat?MevzuatNo=6183&MevzuatTur=1&MevzuatTertip=3
 
                 GÖREV:
-                1. Bu bağlantıda yer alan resmi metni ve 'Değişikliklerin İşlendiği Liste' kısmını analiz et.
-                2. Gecikme zammı oranında (Madde 51) yapılan en güncel değişikliği, tarihini ve Cumhurbaşkanı Karar numarasını bul.
-                3. Bulduğun bu rakamı ve resmi dayanağını raporla.
-                4. Bu oranın neden bu seviyede olduğunu, 2026 yılı başındaki ekonomik hedefler çerçevesinde KOPYA ÇEKMEDEN özgün bir dille analiz et.
-                5. Eğer veriye kesin olarak ulaşamıyorsan uydurma, 'Veriye ulaşılamadı' yaz.
+                1. Yukarıdaki bağlantıda yer alan 6183 sayılı Kanun'un 51. maddesini ve sayfanın sonundaki 'Değişikliklerin İşlendiği Liste' fihristini tara.
+                2. Bu maddeye ilişkin yapılmış olan EN GÜNCEL değişikliği (oranı ve dayanağını) tespit et.
+                3. Bulduğun oranı ve bu kararın resmi numarasını/tarihini raporla.
+                4. Bu oranın neden bu seviyede olduğunu, 2026 yılı başındaki ekonomik hedefler çerçevesinde KOPYA ÇEKMEDEN tamamen kendi mantığınla analiz et.
+                5. Eğer veriye ulaşamıyorsan uydurma, dürüstçe 'Veriye ulaşılamadı' yaz.
 
                 YANIT FORMATI (SADECE JSON):
                 {
@@ -38,23 +39,3 @@ async function run() {
         });
 
         const data = await response.json();
-
-        if (data.error) {
-            console.error("API HATASI:", data.error.message);
-            return;
-        }
-
-        if (data.candidates && data.candidates[0].content) {
-            const textResponse = data.candidates[0].content.parts[0].text;
-            const jsonMatch = textResponse.match(/\{[\s\S]*\}/);
-            if (jsonMatch) {
-                fs.writeFileSync('report.json', jsonMatch[0]);
-                console.log("Analiz tamamlandı. report.json güncellendi.");
-            }
-        }
-    } catch (err) {
-        console.error("SİSTEM HATASI:", err.message);
-    }
-}
-
-run();
