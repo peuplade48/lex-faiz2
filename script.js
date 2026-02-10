@@ -2,31 +2,32 @@ const fs = require('fs');
 
 async function run() {
     const apiKey = process.env.GEMINI_API_KEY;
-    // En güncel model ve endpoint kombinasyonu
-    const model = "gemini-1.5-flash"; 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    // En geniş uyumluluk için models/ ön eki olmadan v1beta endpoint'i
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
     const prompt = {
         contents: [{
             parts: [{
-                text: `GÖREV: Bugün 10 Şubat 2026. 
-                6183 sayılı Kanun'un 51. maddesindeki gecikme zammı oranını İNTERNETTEN (Resmi Gazete ve GİB verileri) araştırarak bul.
-                
-                DİKKAT: 
-                - Sakın 2024 yılına ait uydurma kararname numaraları (8214 vb.) veya yıllık %60 gibi hatalı oranlar verme.
-                - Kasım 2025'te oranı %3,7'ye indiren en güncel Cumhurbaşkanı Kararı'nı tespit et.
-                - Bu %3,7'lik oranı bulduktan sonra; devletin neden artış yerine indirimi tercih ettiğini (dezenflasyon süreci, piyasa faizleri) KOPYA ÇEKMEDEN özgün bir dille analiz et.
-                
-                SADECE JSON YANIT VER:
+                text: `Analiz Kaynağı: https://www.mevzuat.gov.tr/MevzuatMetin/1.3.6183.pdf
+
+                TALİMAT (KESİN):
+                1. Bu PDF'in 51. maddesini bul. Metnin içine değil, en alttaki dipnotlar ve değişiklik listesine bak.
+                2. Orada 2024 ve 2025 yıllarında yapılmış olan Cumhurbaşkanı Kararları (CK) kronolojisini incele.
+                3. Tespit ettiğin EN SON yürürlüğe giren oranı ve bu kararın resmi numarasını bul.
+                4. Bulduğun bu rakamı temel alarak; 2026 yılı başındaki Türkiye ekonomisinin faiz ve enflasyon dengesini, bu rakamın neden bu seviyede olduğunu KOPYA ÇEKMEDEN tamamen özgün bir dille yorumla.
+                5. Eğer PDF'i okuyamıyorsan veya veriye ulaşamıyorsan uydurma veri üretme, 'veriye ulaşamadım' yaz.
+
+                Yanıt formatı sadece JSON:
                 {
-                  "dogrulanmis_oran": "...",
-                  "resmi_karar_verisi": "...",
-                  "ozgun_ekonomik_analiz": "...",
-                  "kaynak": "Google Search / Resmi Gazete"
+                  "tespit_edilen_oran": "...",
+                  "dayanak_verisi": "...",
+                  "ozgun_ekonomik_analiz": "..."
                 }`
             }]
         }],
-        tools: [{ google_search_retrieval: {} }]
+        generationConfig: {
+            temperature: 0 // Yaratıcılığı ve uydurmayı kapat, sadece gördüğünü yaz.
+        }
     };
 
     try {
@@ -38,26 +39,19 @@ async function run() {
 
         const data = await response.json();
 
-        if (data.error) {
-            console.error("API HATASI:", data.error.message);
-            return;
-        }
-
         if (data.candidates && data.candidates[0].content) {
             const textResponse = data.candidates[0].content.parts[0].text;
             const jsonMatch = textResponse.match(/\{[\s\S]*\}/);
 
             if (jsonMatch) {
                 fs.writeFileSync('report.json', jsonMatch[0]);
-                console.log("İŞLEM BAŞARILI: Rapor gerçek verilerle güncellendi.");
-                console.log(jsonMatch[0]);
+                console.log("Bağımsız rapor oluşturuldu. Bakalım ne buldu...");
             }
         } else {
-            console.log("Boş yanıt alındı. Veri yapısı:", JSON.stringify(data));
+            console.error("Model yanıt üretemedi:", JSON.stringify(data));
         }
     } catch (err) {
-        console.error("SİSTEM HATASI:", err.message);
+        console.error("Sistem Hatası:", err.message);
     }
 }
-
 run();
