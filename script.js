@@ -7,24 +7,22 @@ async function run() {
     const filePath = path.join(__dirname, 'report.json');
 
     try {
-        console.log("1. Modeller listeleniyor...");
+        console.log("1. Modeller taranıyor...");
         const listRes = await fetch(`${baseUrl}/models?key=${apiKey}`);
         const listData = await listRes.json();
-        
         const activeModel = listData.models.find(m => m.name.includes('flash'));
-        if (!activeModel) throw new Error("Flash modeli bulunamadı!");
-        console.log(`2. Kullanılan model: ${activeModel.name}`);
-
+        
+        console.log(`2. Model seçildi: ${activeModel.name}`);
         const url = `${baseUrl}/${activeModel.name}:generateContent?key=${apiKey}`;
+
         const prompt = {
             contents: [{
                 parts: [{
-                    text: `GÖREV: 6183 Sayılı Kanun 51. maddedeki gecikme zammı oranını Google Search ile bul.
+                    text: `Sistem Tarihi: 10 Şubat 2026.
+                    GÖREV: 6183 Sayılı Kanun 51. maddedeki gecikme zammı oranını Google Search ile bul.
+                    ÖNEMLİ: Kasım 2025'teki güncel Cumhurbaşkanı kararını (%3,7 oranını) teyit et.
                     
-                    ÖNEMLİ: Sadece JSON formatında yanıt ver. 
-                    Kasım 2025'teki güncel Cumhurbaşkanı kararını (3,7 oranını) bulmaya odaklan.
-                    
-                    FORMAT:
+                    Yanıtını SADECE aşağıdaki JSON formatında ver, başka hiçbir açıklama yapma:
                     {
                       "last_run": "${new Date().toISOString()}",
                       "report": {
@@ -37,10 +35,13 @@ async function run() {
                 }]
             }],
             tools: [{ google_search: {} }],
-            generationConfig: { temperature: 0, response_mime_type: "application/json" }
+            generationConfig: { 
+                temperature: 0 
+                // NOT: response_mime_type KALDIRILDI çünkü Search tool ile çakışıyor.
+            }
         };
 
-        console.log("3. API'ye istek gönderiliyor...");
+        console.log("3. API'ye istek gönderiliyor (Search Tool aktif)...");
         const response = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -50,24 +51,24 @@ async function run() {
         const data = await response.json();
         
         if (data.candidates && data.candidates[0].content) {
-            let finalJson = data.candidates[0].content.parts[0].text;
-            
-            // Markdown temizliği (eğer varsa)
-            finalJson = finalJson.replace(/```json/g, "").replace(/```/g, "").trim();
+            const rawText = data.candidates[0].content.parts[0].text;
+            console.log("4. API Yanıtı Alındı. JSON ayıklanıyor...");
 
-            console.log("4. API'den gelen veri:", finalJson);
-            
-            // DOSYA YAZMA İŞLEMİ
-            fs.writeFileSync(filePath, finalJson, 'utf8');
-            
-            // Yazılan dosyayı kontrol et
-            const checkFile = fs.readFileSync(filePath, 'utf8');
-            console.log("5. Dosyaya yazılan içerik boyutu:", checkFile.length);
+            // Metin içindeki JSON yapısını bul (Regex ile)
+            const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                const finalJson = jsonMatch[0];
+                fs.writeFileSync(filePath, finalJson, 'utf8');
+                console.log("5. Başarılı! report.json kaydedildi.");
+                console.log("İçerik:", finalJson);
+            } else {
+                throw new Error("API yanıtında JSON yapısı bulunamadı.");
+            }
         } else {
-            console.log("HATA: API'den boş yanıt döndü!", JSON.stringify(data));
+            console.error("HATA DETAYI:", JSON.stringify(data));
         }
     } catch (err) {
-        console.error("KRİTİK HATA:", err.message);
+        console.error("SİSTEM HATASI:", err.message);
     }
 }
 run();
