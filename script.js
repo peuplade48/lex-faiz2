@@ -2,7 +2,6 @@ const fs = require('fs');
 
 async function run() {
     const apiKey = process.env.GEMINI_API_KEY;
-    // URL'deki model ismini en yalın ve stabil haliyle güncelledik
     const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
     const prompt = {
@@ -11,9 +10,9 @@ async function run() {
                 text: `KAYNAK: https://mevzuat.gov.tr/mevzuat?MevzuatNo=6183&MevzuatTur=1&MevzuatTertip=3
 
                 GÖREV:
-                1. Yukarıdaki bağlantıda yer alan 6183 sayılı Kanun'un 51. maddesini ve sayfanın en sonundaki değişiklik listesini analiz et.
-                2. Bu maddeye ilişkin yürürlükte olan en güncel oranı ve bu oranın resmi dayanağını (Karar no ve tarih) tespit et.
-                3. Tespit ettiğin veriyi, 2026 yılı başındaki Türkiye ekonomisinin faiz politikalarıyla kıyaslayarak (kopya çekmeden, tamamen kendi zekanla) yorumla.
+                1. Bu bağlantıdaki 51. maddeyi ve sayfanın en sonundaki değişiklik listesini tara.
+                2. Yürürlükte olan en güncel oranı ve dayanağı olan Cumhurbaşkanı Karar numarasını bul.
+                3. Oranı ve dayanağını yazdıktan sonra, neden bu oranın seçildiğini 2026 başındaki ekonomik hedeflerle bağdaştırarak KOPYA ÇEKMEDEN analiz et.
                 4. Eğer veriye ulaşamıyorsan uydurma, 'Veriye ulaşılamadı' yaz.
 
                 YANIT FORMATI (JSON):
@@ -25,7 +24,7 @@ async function run() {
             }]
         }],
         generationConfig: {
-            temperature: 0 // Tahmin yürütmeyi (uydurmayı) kapatır.
+            temperature: 0
         }
     };
 
@@ -43,4 +42,18 @@ async function run() {
             return;
         }
 
-        if (data.candidates && data
+        if (data.candidates && data.candidates[0].content) {
+            const textResponse = data.candidates[0].content.parts[0].text;
+            const jsonMatch = textResponse.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                fs.writeFileSync('report.json', jsonMatch[0]);
+                console.log("Rapor başarıyla yazıldı.");
+                console.log(jsonMatch[0]);
+            }
+        }
+    } catch (err) {
+        console.error("SİSTEM HATASI:", err.message);
+    }
+}
+
+run();
