@@ -2,7 +2,8 @@ const fs = require('fs');
 
 async function run() {
     const apiKey = process.env.GEMINI_API_KEY;
-    const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    // v1beta sürümünde tam model ismini kullanarak 404 hatasını bypass ediyoruz
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
     const prompt = {
         contents: [{
@@ -10,15 +11,16 @@ async function run() {
                 text: `KAYNAK: https://mevzuat.gov.tr/mevzuat?MevzuatNo=6183&MevzuatTur=1&MevzuatTertip=3
 
                 GÖREV:
-                1. Bu bağlantıdaki 51. maddeyi ve sayfanın en sonundaki değişiklik listesini tara.
-                2. Yürürlükte olan en güncel oranı ve dayanağı olan Cumhurbaşkanı Karar numarasını bul.
-                3. Oranı ve dayanağını yazdıktan sonra, neden bu oranın seçildiğini 2026 başındaki ekonomik hedeflerle bağdaştırarak KOPYA ÇEKMEDEN analiz et.
-                4. Eğer veriye ulaşamıyorsan uydurma, 'Veriye ulaşılamadı' yaz.
+                1. Bu bağlantıda yer alan resmi metni ve 'Değişikliklerin İşlendiği Liste' kısmını analiz et.
+                2. Gecikme zammı oranında (Madde 51) yapılan en güncel değişikliği, tarihini ve Cumhurbaşkanı Karar numarasını bul.
+                3. Bulduğun bu rakamı ve resmi dayanağını raporla.
+                4. Bu oranın neden bu seviyede olduğunu, 2026 yılı başındaki ekonomik hedefler çerçevesinde KOPYA ÇEKMEDEN özgün bir dille analiz et.
+                5. Eğer veriye kesin olarak ulaşamıyorsan uydurma, 'Veriye ulaşılamadı' yaz.
 
-                YANIT FORMATI (JSON):
+                YANIT FORMATI (SADECE JSON):
                 {
                   "tespit_edilen_oran": "...",
-                  "hukuki_dayanak": "...",
+                  "resmi_dayanak": "...",
                   "ozgun_ekonomik_analiz": "..."
                 }`
             }]
@@ -47,8 +49,7 @@ async function run() {
             const jsonMatch = textResponse.match(/\{[\s\S]*\}/);
             if (jsonMatch) {
                 fs.writeFileSync('report.json', jsonMatch[0]);
-                console.log("Rapor başarıyla yazıldı.");
-                console.log(jsonMatch[0]);
+                console.log("Analiz tamamlandı. report.json güncellendi.");
             }
         }
     } catch (err) {
