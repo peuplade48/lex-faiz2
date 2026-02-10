@@ -1,56 +1,54 @@
-name: Gecikme Zammı Güncelleyici
+const fs = require('fs');
+const path = require('path');
 
-on:
-  # 1. PHP/JS Arayüzünden gelen sinyal için
-  repository_dispatch:
-    types: [disaridan-tetikleme]
+async function run() {
+    const apiKey = process.env.GEMINI_API_KEY;
+    const baseUrl = "https://generativelanguage.googleapis.com/v1beta";
+    const filePath = path.join(__dirname, 'report.json');
 
-  # 2. GitHub panelinden manuel çalıştırmak için
-  workflow_dispatch:
+    try {
+        const listRes = await fetch(`${baseUrl}/models?key=${apiKey}`);
+        const listData = await listRes.json();
+        const activeModel = listData.models.find(m => m.name.includes('flash'));
+        const url = `${baseUrl}/${activeModel.name}:generateContent?key=${apiKey}`;
 
-  # 3. Her gece otomatik kontrol için (Opsiyonel)
-  schedule:
-    - cron: '0 5 * * *'
+        const prompt = {
+            contents: [{
+                parts: [{
+                    text: `GÖREV: 6183 Sayılı Kanun 51. maddedeki gecikme zammı oranını Google Search ile bul.
+                    Sadece aşağıdaki JSON formatında yanıt ver:
+                    {
+                      "last_run": "${new Date().toISOString()}",
+                      "report": {
+                        "official_confirmation": "(oran)",
+                        "legal_basis": "(karar no)",
+                        "gazette_date": "(tarih)",
+                        "current_decree_rate": "(oran)"
+                      }
+                    }`
+                }]
+            }],
+            tools: [{ google_search: {} }],
+            generationConfig: { temperature: 0 }
+        };
 
-jobs:
-  update-rate:
-    runs-on: ubuntu-latest
-    
-    # Yazma yetkisi vermezsek "Nothing to commit" hataları devam eder
-    permissions:
-      contents: write
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(prompt)
+        });
 
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install Dependencies
-        run: |
-          # Eğer node_modules yoksa fetch zaten Node 18+ ile yerleşik gelir
-          # Ekstra paket kullanıyorsan buraya ekleyebilirsin
-
-      - name: Run Gemini Research Script
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        run: node script.js
-
-      - name: Commit and Push Changes
-        run: |
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-          
-          # Dosyanın oluşup oluşmadığını kontrol et
-          if [ -f report.json ]; then
-            git add report.json
-            # Sadece değişiklik varsa commit yap, yoksa hata verme
-            git commit -m "🤖 AI: Gecikme zammı oranı güncellendi (Sistem Tarihi: 2026)" || echo "Değişiklik yok."
-            git push
-          else
-            echo "Hata: report.json dosyası oluşturulamadı!"
-            exit 1
-          fi
+        const data = await response.json();
+        if (data.candidates && data.candidates[0].content) {
+            const rawText = data.candidates[0].content.parts[0].text;
+            const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                fs.writeFileSync(filePath, jsonMatch[0], 'utf8');
+                console.log("report.json başarıyla güncellendi.");
+            }
+        }
+    } catch (err) {
+        console.error("Hata:", err.message);
+    }
+}
+run();
